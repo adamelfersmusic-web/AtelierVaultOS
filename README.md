@@ -16,13 +16,30 @@ to `main`.
 The app talks to the vault's HTTP API (`<vault-url>/api/...`) directly from
 the browser — no server in between, no MCP.
 
-1. Open the app. You land on the connect screen.
-2. Paste your vault URL (e.g. `https://<hub>/vault/<name>`).
-3. Paste a hub JWT with `vault:write` scope, e.g.
-   `parachute auth mint-token --scope vault:<name>:write`.
-4. Connect. Both values live only in your browser's localStorage and ride
-   along as `Authorization: Bearer …`. **Disconnect** (bottom of the sidebar)
-   wipes them.
+**Connect with OAuth (default).** Enter your vault URL and click *Connect
+with OAuth*: the app discovers the hub's authorization server (RFC 8414 at
+`{vault}/.well-known/oauth-authorization-server`), dynamically registers
+itself as a public client (RFC 7591, `token_endpoint_auth_method: none`,
+cached per issuer+redirect), and sends you to the hub with PKCE (S256). You
+sign in on the hub — the app never sees your password — approve, and land
+back signed in. Sessions persist: the access token refreshes itself ~30s
+before expiry (and reactively on a 401, with a silent replay), and every
+refresh-token rotation is persisted, so you stay signed in as long as the
+hub's refresh tokens live. If the hub wants the app approved first, the
+approval link is surfaced in the UI — approve, then sign in again.
+
+OAuth needs a secure context (the deployed HTTPS URL or `http://localhost`
+in dev). The redirect URI is the app's own index URL, computed at runtime,
+so it works at the GitHub Pages project subpath with nothing hardcoded.
+
+**Advanced → paste token (fallback).** The v1 flow: paste a hub JWT with
+`vault:write` scope (`parachute auth mint-token --scope vault:<name>:write`).
+Pasted tokens are used as-is and never refreshed.
+
+Everything auth lives only in this browser's localStorage and rides along as
+`Authorization: Bearer …`. **Disconnect** (bottom of the sidebar) wipes the
+session, refresh material, and cached client registrations. Existing v1
+token-paste configs migrate automatically on first load.
 
 ## How writes work
 
@@ -63,10 +80,19 @@ npm run test:e2e   # full browser drive against the mock (run build first)
 ```
 
 The same 14-scenario drive can run against a **genuine** parachute-vault
-server (e.g. a local checkout booted with `VAULT_AUTH_TOKEN`):
+server (e.g. a local checkout booted with `VAULT_AUTH_TOKEN`, or a
+hub-managed vault with a hub-minted JWT):
 
 ```bash
 REAL_VAULT=http://127.0.0.1:8790/vault/<name> REAL_TOKEN=<bearer> npm run test:e2e
+```
+
+And the OAuth sign-in can be driven against a **genuine** Parachute hub +
+vault stack running locally (real login form, consent screen, DCR, PKCE,
+hub-signed JWTs):
+
+```bash
+REAL_HUB=1 npx playwright test e2e/real-hub.spec.ts
 ```
 
 ## Architecture

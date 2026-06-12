@@ -26,13 +26,6 @@ export interface TagInfo {
   count: number
 }
 
-export interface VaultConfig {
-  /** Vault root, e.g. https://hub.example.com/vault/yourname (no trailing slash). */
-  url: string
-  /** Hub JWT with vault:write (or vault:<name>:write) scope. */
-  token: string
-}
-
 export class VaultError extends Error {
   status: number
   code?: string

@@ -296,6 +296,75 @@
   text-align: center;
 }
 
+.connect-divider {
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 2px;
+}
+.advanced-toggle {
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+.advanced-toggle:hover {
+  color: var(--ink-2);
+  background: var(--surface-2);
+}
+.advanced-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.approve-box {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gold) 32%, transparent);
+  border-radius: var(--r-md);
+  padding: 14px;
+}
+.approve-title {
+  margin: 0;
+  font-weight: 620;
+  font-size: 13px;
+  color: var(--gold-bright);
+}
+.approve-text {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+.approve-link {
+  justify-content: center;
+}
+
+.connect-completing {
+  align-items: center;
+  text-align: center;
+}
+.spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2.5px solid var(--line-strong);
+  border-top-color: var(--gold);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ————————————————————————— database head ————————————————————————— */
 
 .db {

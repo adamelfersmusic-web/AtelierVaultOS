@@ -15,28 +15,75 @@
 // Run: npm run mock   (listens on http://127.0.0.1:8787)
 
 import http from 'node:http'
+import { createHash, randomBytes } from 'node:crypto'
 import { makeSeed, TAGS } from './seed.mjs'
 
 const PORT = process.env.MOCK_PORT ? Number(process.env.MOCK_PORT) : 8787
 const TOKEN = 'atelier-test-token'
+const ISSUER = `http://127.0.0.1:${PORT}`
 
 let notes = makeSeed()
 let lastTs = Date.now()
 let idSeq = 900000
+
+// ——— OAuth issuer state (mirrors the Parachute hub's protocol surface) ———
+const freshOAuth = () => ({
+  clients: new Map(), // client_id → { redirect_uris, registration }
+  codes: new Map(), // code → { clientId, redirectUri, challenge, scope, used }
+  validAccessTokens: new Set(),
+  currentRefreshToken: null,
+  tokenSeq: 1,
+  rotationCount: 0,
+  approvalMode: false, // when true, token exchange returns invalid_client + approve_url
+  expiresIn: 3600,
+  lastRegistration: null,
+})
+let oauth = freshOAuth()
+
+function issueTokens() {
+  const n = oauth.tokenSeq++
+  const access = `mock-at-${n}`
+  const refresh = `mock-rt-${n}`
+  oauth.validAccessTokens.add(access)
+  oauth.currentRefreshToken = refresh
+  return {
+    access_token: access,
+    token_type: 'bearer',
+    scope: 'vault:read vault:write',
+    vault: 'mockvault',
+    refresh_token: refresh,
+    expires_in: oauth.expiresIn,
+    services: { vault: { url: ISSUER }, 'vault:mockvault': { url: ISSUER } },
+  }
+}
 
 const nextStamp = () => {
   lastTs = Math.max(Date.now(), lastTs + 1)
   return new Date(lastTs).toISOString()
 }
 
-const CORS = {
+const BASE_CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
 }
 
+// Credentialed requests (the DCR POST sends `credentials: 'include'`, like
+// the hub expects) forbid ACAO `*` — echo the caller's origin instead, the
+// way the real hub does.
+function corsFor(req) {
+  const origin = req.headers.origin
+  return origin
+    ? {
+        ...BASE_CORS,
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+      }
+    : BASE_CORS
+}
+
 function json(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'application/json', ...CORS })
+  res.writeHead(status, { 'Content-Type': 'application/json', ...(res.corsHeaders ?? BASE_CORS) })
   res.end(JSON.stringify(body))
 }
 
@@ -66,16 +113,142 @@ async function readBody(req) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`)
   const path = url.pathname
+  res.corsHeaders = corsFor(req)
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(204, CORS)
+    res.writeHead(204, res.corsHeaders)
     return res.end()
   }
 
   // ——— test control plane (no auth) ———
   if (path === '/__test/reset' && req.method === 'POST') {
     notes = makeSeed()
+    oauth = freshOAuth()
     return json(res, 200, { ok: true })
+  }
+  if (path === '/__test/oauth' && req.method === 'POST') {
+    const body = await readBody(req)
+    if (typeof body.approvalMode === 'boolean') oauth.approvalMode = body.approvalMode
+    if (typeof body.expiresIn === 'number') oauth.expiresIn = body.expiresIn
+    if (body.revokeAccess === true) oauth.validAccessTokens.clear()
+    return json(res, 200, { ok: true })
+  }
+  if (path === '/__test/oauth-state' && req.method === 'GET') {
+    return json(res, 200, {
+      rotationCount: oauth.rotationCount,
+      approvalMode: oauth.approvalMode,
+      clientCount: oauth.clients.size,
+      currentRefreshToken: oauth.currentRefreshToken,
+      validAccessTokens: [...oauth.validAccessTokens],
+      lastRegistration: oauth.lastRegistration,
+    })
+  }
+
+  // ——— OAuth issuer (RFC 8414 discovery + RFC 7591 DCR + PKCE code flow) ———
+  if (path === '/.well-known/oauth-authorization-server' && req.method === 'GET') {
+    return json(res, 200, {
+      issuer: ISSUER,
+      authorization_endpoint: `${ISSUER}/oauth/authorize`,
+      token_endpoint: `${ISSUER}/oauth/token`,
+      registration_endpoint: `${ISSUER}/oauth/register`,
+      code_challenge_methods_supported: ['S256'],
+    })
+  }
+
+  if (path === '/oauth/register' && req.method === 'POST') {
+    const body = await readBody(req)
+    if (
+      !Array.isArray(body.redirect_uris) ||
+      body.redirect_uris.length === 0 ||
+      body.token_endpoint_auth_method !== 'none'
+    ) {
+      return json(res, 400, { error: 'invalid_client_metadata' })
+    }
+    const clientId = `mock-client-${randomBytes(6).toString('hex')}`
+    oauth.clients.set(clientId, { redirect_uris: body.redirect_uris })
+    oauth.lastRegistration = body
+    return json(res, 201, { client_id: clientId })
+  }
+
+  if (path === '/oauth/authorize' && req.method === 'GET') {
+    const q = url.searchParams
+    const clientId = q.get('client_id') ?? ''
+    const redirectUri = q.get('redirect_uri') ?? ''
+    const challenge = q.get('code_challenge') ?? ''
+    const state = q.get('state') ?? ''
+    const client = oauth.clients.get(clientId)
+    const bad = (msg) => {
+      res.writeHead(400, { 'Content-Type': 'text/plain', ...res.corsHeaders })
+      res.end(`authorize error: ${msg}`)
+    }
+    if (!client) return bad('unknown client_id')
+    if (!client.redirect_uris.includes(redirectUri)) return bad('redirect_uri mismatch')
+    if (q.get('response_type') !== 'code') return bad('response_type must be code')
+    if (!challenge || q.get('code_challenge_method') !== 'S256') return bad('S256 PKCE required')
+    const code = `mock-code-${randomBytes(8).toString('hex')}`
+    oauth.codes.set(code, {
+      clientId,
+      redirectUri,
+      challenge,
+      scope: q.get('scope') ?? '',
+      used: false,
+    })
+    const back = new URL(redirectUri)
+    back.searchParams.set('code', code)
+    back.searchParams.set('state', state)
+    res.writeHead(200, { 'Content-Type': 'text/html', ...res.corsHeaders })
+    return res.end(`<!doctype html><html><head><title>Mock Hub — Sign in</title></head>
+<body style="font-family:sans-serif;background:#111;color:#eee;display:grid;place-items:center;height:100vh">
+<main style="text-align:center">
+<h1>Mock Parachute Hub</h1>
+<p>Atelier Vault OS wants access to <b>mockvault</b>.</p>
+<a id="approve" href="${back.toString()}" style="display:inline-block;padding:10px 22px;background:#C4923A;color:#111;border-radius:8px;text-decoration:none;font-weight:600">Approve sign-in</a>
+</main></body></html>`)
+  }
+
+  if (path === '/oauth/token' && req.method === 'POST') {
+    const chunks = []
+    for await (const c of req) chunks.push(c)
+    const form = new URLSearchParams(Buffer.concat(chunks).toString('utf8'))
+    const grant = form.get('grant_type')
+
+    if (grant === 'authorization_code') {
+      if (oauth.approvalMode) {
+        return json(res, 400, {
+          error: 'invalid_client',
+          approve_url: `${ISSUER}/oauth/approve?client_id=${form.get('client_id')}`,
+        })
+      }
+      const entry = oauth.codes.get(form.get('code') ?? '')
+      if (!entry || entry.used) return json(res, 400, { error: 'invalid_grant' })
+      if (entry.clientId !== form.get('client_id')) return json(res, 400, { error: 'invalid_client' })
+      if (entry.redirectUri !== form.get('redirect_uri')) return json(res, 400, { error: 'invalid_grant' })
+      const verifier = form.get('code_verifier') ?? ''
+      const derived = createHash('sha256').update(verifier).digest('base64url')
+      if (derived !== entry.challenge) return json(res, 400, { error: 'invalid_grant', detail: 'PKCE mismatch' })
+      entry.used = true // single-use codes, per OAuth 2.1
+      return json(res, 200, issueTokens())
+    }
+
+    if (grant === 'refresh_token') {
+      // Strict rotation: only the CURRENT refresh token is accepted.
+      if (form.get('refresh_token') !== oauth.currentRefreshToken) {
+        return json(res, 400, { error: 'invalid_grant' })
+      }
+      // Old access tokens die with the rotation.
+      oauth.validAccessTokens.clear()
+      oauth.rotationCount++
+      return json(res, 200, issueTokens())
+    }
+
+    return json(res, 400, { error: 'unsupported_grant_type' })
+  }
+
+  if (path === '/oauth/approve' && req.method === 'GET') {
+    // Visiting the approval page approves the client (simulates the hub admin).
+    oauth.approvalMode = false
+    res.writeHead(200, { 'Content-Type': 'text/html', ...res.corsHeaders })
+    return res.end('<!doctype html><body style="font-family:sans-serif"><h1>Approved</h1><p>Return to the app and sign in again.</p></body>')
   }
   if (path === '/__test/note' && req.method === 'GET') {
     const n = findNote(url.searchParams.get('path') ?? '')
@@ -96,9 +269,10 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { status: 'ok', vault: 'mock' })
   }
 
-  // ——— auth ———
+  // ——— auth: the static operator token, or any live OAuth access token ———
   const auth = req.headers.authorization ?? ''
-  if (auth !== `Bearer ${TOKEN}`) {
+  const bearer = auth.replace(/^Bearer /, '')
+  if (auth !== `Bearer ${TOKEN}` && !oauth.validAccessTokens.has(bearer)) {
     const verb = req.method === 'GET' ? 'vault:read' : 'vault:write'
     return json(res, 401, {
       error: 'Unauthorized',

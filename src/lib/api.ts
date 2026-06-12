@@ -1,6 +1,9 @@
 // Thin client over the Parachute Vault REST API.
-// Base = <vault url>/api ; Authorization: Bearer <token> on every request.
+// Base = <vault url>/api ; the AuthManager supplies a live access token for
+// every request (proactive refresh near expiry, reactive refresh + single
+// replay on a 401).
 
+import type { AuthManager } from './auth'
 import {
   VaultAuthError,
   VaultConflictError,
@@ -8,7 +11,6 @@ import {
   type Note,
   type NoteMetadata,
   type TagInfo,
-  type VaultConfig,
 } from './types'
 
 /**
@@ -28,26 +30,30 @@ function encodeNoteId(id: string, style: PathStyle): string {
 }
 
 export class VaultApi {
-  private cfg: VaultConfig
+  private auth: AuthManager
   private pathStyle: PathStyle
 
-  constructor(cfg: VaultConfig) {
-    this.cfg = { url: cfg.url.replace(/\/+$/, ''), token: cfg.token }
+  constructor(auth: AuthManager) {
+    this.auth = auth
     this.pathStyle =
       (localStorage.getItem(PATH_STYLE_KEY) as PathStyle | null) ?? 'segments'
   }
 
-  private async request<T>(
+  private get baseUrl(): string {
+    return this.auth.vaultBase.replace(/\/+$/, '')
+  }
+
+  private async send(
     method: string,
     path: string,
+    token: string,
     body?: unknown,
-  ): Promise<T> {
-    let res: Response
+  ): Promise<Response> {
     try {
-      res = await fetch(`${this.cfg.url}/api${path}`, {
+      return await fetch(`${this.baseUrl}/api${path}`, {
         method,
         headers: {
-          Authorization: `Bearer ${this.cfg.token}`,
+          Authorization: `Bearer ${token}`,
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -55,11 +61,27 @@ export class VaultApi {
     } catch (e) {
       throw new VaultError(
         0,
-        `Could not reach the vault at ${this.cfg.url} — ${
+        `Could not reach the vault at ${this.baseUrl} — ${
           e instanceof Error ? e.message : String(e)
         }`,
       )
     }
+  }
+
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    let token = await this.auth.getAccessToken()
+    let res = await this.send(method, path, token, body)
+
+    // Access token rejected — try one silent refresh, then replay.
+    if (res.status === 401 && (await this.auth.tryRefresh())) {
+      token = await this.auth.getAccessToken()
+      res = await this.send(method, path, token, body)
+    }
+
     if (res.status === 204) return undefined as T
     let data: any = null
     try {
