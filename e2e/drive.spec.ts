@@ -105,23 +105,30 @@ test.beforeEach(async ({ page }) => {
   await resetVault(page)
 })
 
-test('connect screen: validates the token against the vault', async ({ page }) => {
+test('connect screen: token paste lives under Advanced and validates', async ({ page }) => {
   await page.goto('/')
   await expect(page).toHaveURL(/#\/connect/)
+  // OAuth is the primary path; token paste is the Advanced fallback.
+  await expect(page.getByTestId('connect-oauth')).toBeVisible()
   await page.screenshot({ path: `${SHOTS}/01-connect.png` })
 
   await page.fill('input[name="vault-url"]', VAULT_URL)
+  await page.getByTestId('advanced-toggle').click()
   await page.fill('textarea[name="vault-token"]', 'wrong-token')
-  await page.click('button:has-text("Connect")')
+  await page.getByTestId('connect-token').click()
   await expect(page.locator('.connect-error')).toBeVisible()
 
   await page.fill('textarea[name="vault-token"]', TOKEN)
-  await page.click('button:has-text("Connect")')
+  await page.getByTestId('connect-token').click()
   await expect(page).toHaveURL(/#\/scripts/)
   await expect(page.locator('.db-table tbody tr').first()).toBeVisible()
-  // Config persisted for the next session.
-  const stored = await page.evaluate(() => localStorage.getItem('atelier.vault'))
-  expect(JSON.parse(stored!)).toEqual({ url: VAULT_URL, token: TOKEN })
+  // Session persisted for the next visit.
+  const stored = await page.evaluate(() => localStorage.getItem('atelier.session.v1'))
+  expect(JSON.parse(stored!)).toEqual({
+    vaultUrl: VAULT_URL,
+    mode: 'token',
+    token: { accessToken: TOKEN },
+  })
 })
 
 test('table: rows, sorting, pipeline filter, field filter, search', async ({ page }) => {
@@ -459,6 +466,10 @@ test('lens choice persists across reloads; disconnect wipes credentials', async 
 
   await page.click('.rail-disconnect')
   await expect(page).toHaveURL(/#\/connect/)
-  const stored = await page.evaluate(() => localStorage.getItem('atelier.vault'))
-  expect(stored).toBeNull()
+  const stored = await page.evaluate(() => ({
+    session: localStorage.getItem('atelier.session.v1'),
+    legacy: localStorage.getItem('atelier.vault'),
+  }))
+  expect(stored.session).toBeNull()
+  expect(stored.legacy).toBeNull()
 })

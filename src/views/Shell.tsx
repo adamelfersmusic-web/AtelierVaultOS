@@ -37,8 +37,16 @@ function Wordmark() {
 }
 
 export function Shell({ route, children }: { route: Route; children: ReactNode }) {
-  const { config, connection } = useStore()
-  const host = config ? new URL(config.url).host + new URL(config.url).pathname : ''
+  const { session, connection } = useStore()
+  let host = ''
+  try {
+    if (session) {
+      const u = new URL(session.vaultUrl)
+      host = u.host + u.pathname
+    }
+  } catch {
+    host = session?.vaultUrl ?? ''
+  }
 
   return (
     <div className="shell">
@@ -77,15 +85,16 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
             <div className="vault-status vault-status-error">
               <i className="status-dot status-dot-error" />
               <span className="vault-host" title={host}>
-                token rejected
+                session expired — reconnect
               </span>
             </div>
           ) : (
-            <div className="vault-status">
+            <div
+              className="vault-status"
+              title={`${host} · ${session?.mode === 'oauth' ? 'OAuth session' : 'pasted token'}`}
+            >
               <i className="status-dot" />
-              <span className="vault-host" title={host}>
-                {host}
-              </span>
+              <span className="vault-host">{host}</span>
             </div>
           )}
           <button

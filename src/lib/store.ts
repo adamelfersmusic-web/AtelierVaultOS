@@ -1,4 +1,5 @@
-// Global session store: vault connection, note cache, write pipeline.
+// Global session store: vault connection (OAuth or pasted token), note cache,
+// write pipeline.
 //
 // Every write is human-initiated and goes through optimistic concurrency:
 // the note's last-known updatedAt rides along as if_updated_at, and a 409
@@ -8,6 +9,18 @@
 
 import { useSyncExternalStore } from 'react'
 import { VaultApi } from './api'
+import { AuthManager, type AuthSession } from './auth'
+import {
+  beginOAuth,
+  clearCachedClients,
+  clearPending,
+  completeOAuth,
+  loadPending,
+  normalizeVaultUrl,
+  PendingApprovalError,
+  resolveVaultUrl,
+  storedFromTokenResponse,
+} from './oauth'
 import { slugify } from './format'
 import {
   VaultAuthError,
@@ -15,11 +28,12 @@ import {
   type Note,
   type NoteMetadata,
   type TagInfo,
-  type VaultConfig,
 } from './types'
 import { SCRIPTS_DB } from '../domain/scripts'
 
-const CONFIG_KEY = 'atelier.vault'
+const SESSION_KEY = 'atelier.session.v1'
+const LEGACY_CONFIG_KEY = 'atelier.vault' // v1 token-paste config, migrated on load
+const LAST_URL_KEY = 'atelier.lastVaultUrl'
 
 export type ConnectionState = 'idle' | 'ok' | 'auth-error'
 
@@ -31,8 +45,13 @@ export interface ToastItem {
 }
 
 export interface StoreState {
-  config: VaultConfig | null
+  session: AuthSession | null
   connection: ConnectionState
+  /** OAuth return in progress (exchanging the code). */
+  oauthStatus: 'idle' | 'completing'
+  oauthError: string | null
+  /** Hub requires approval of this client — link the human must visit. */
+  approveUrl: string | null
   /** Note cache keyed by vault path. */
   notes: Record<string, Note>
   /** Paths of the scripts dataset, in vault order. */
@@ -55,13 +74,34 @@ export class ContentDivergedError extends Error {
   }
 }
 
-function loadConfig(): VaultConfig | null {
+// ---------------------------------------------------------------------------
+// Session persistence (+ migration from the v1 token-paste config)
+// ---------------------------------------------------------------------------
+
+function loadSavedSession(): AuthSession | null {
   try {
-    const raw = localStorage.getItem(CONFIG_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (typeof parsed?.url === 'string' && typeof parsed?.token === 'string') {
-      return { url: parsed.url, token: parsed.token }
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<AuthSession>
+      if (parsed.vaultUrl && parsed.token?.accessToken) return parsed as AuthSession
+    }
+  } catch {
+    /* fall through to legacy */
+  }
+  try {
+    const legacy = localStorage.getItem(LEGACY_CONFIG_KEY)
+    if (legacy) {
+      const parsed = JSON.parse(legacy)
+      if (typeof parsed?.url === 'string' && typeof parsed?.token === 'string') {
+        const session: AuthSession = {
+          vaultUrl: parsed.url,
+          mode: 'token',
+          token: { accessToken: parsed.token },
+        }
+        localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+        localStorage.removeItem(LEGACY_CONFIG_KEY)
+        return session
+      }
     }
   } catch {
     /* corrupted config — treat as signed out */
@@ -69,10 +109,23 @@ function loadConfig(): VaultConfig | null {
   return null
 }
 
+function saveSession(session: AuthSession): void {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+}
+
+export function lastVaultUrl(): string | null {
+  return localStorage.getItem(LAST_URL_KEY)
+}
+
 let api: VaultApi | null = null
+let manager: AuthManager | null = null
+
 let state: StoreState = {
-  config: null,
+  session: null,
   connection: 'idle',
+  oauthStatus: 'idle',
+  oauthError: null,
+  approveUrl: null,
   notes: {},
   scripts: null,
   scriptsStatus: 'idle',
@@ -136,41 +189,132 @@ export function dismissToast(id: number): void {
 }
 
 // ---------------------------------------------------------------------------
-// Connection
+// Connection lifecycle
 // ---------------------------------------------------------------------------
 
-export function init(): void {
-  const config = loadConfig()
-  if (!config) return
-  api = new VaultApi(config)
-  set({ config, connection: 'ok' })
-  void loadScripts()
-  void loadTags()
-}
-
-export async function connect(url: string, token: string): Promise<void> {
-  const cfg: VaultConfig = { url: url.replace(/\/+$/, ''), token: token.trim() }
-  const probe = new VaultApi(cfg)
-  await probe.ping() // throws with a precise message on failure
-  api = probe
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg))
-  set({ config: cfg, connection: 'ok', scriptsStatus: 'idle', notes: {} })
-  void loadScripts()
-  void loadTags()
-}
-
-export function disconnect(): void {
-  localStorage.removeItem(CONFIG_KEY)
-  api = null
+function adoptSession(session: AuthSession): void {
+  saveSession(session)
+  manager = new AuthManager(session, (rotated) => {
+    // Persist every refresh-token rotation the moment it happens.
+    saveSession(rotated)
+    set({ session: rotated })
+  })
+  api = new VaultApi(manager)
   set({
-    config: null,
+    session,
+    connection: 'ok',
+    oauthError: null,
+    approveUrl: null,
+    scriptsStatus: 'idle',
+    notes: {},
+  })
+  void loadScripts()
+  void loadTags()
+}
+
+/** Synchronous boot: restore a saved session (called before first render). */
+export function init(): void {
+  const session = loadSavedSession()
+  if (session) adoptSession(session)
+}
+
+/**
+ * Handle an OAuth return (?code&state or ?error) if one is present in the
+ * URL. Mirrors the proven reference wiring: strip the params immediately so a
+ * refresh doesn't re-run the exchange, then complete the code → token swap.
+ */
+export async function processOAuthReturn(): Promise<void> {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  const oauthState = params.get('state')
+  const hubError = params.get('error')
+  if (!((code && oauthState) || hubError)) return
+
+  const cleanUrl = window.location.origin + window.location.pathname
+  window.history.replaceState(null, '', cleanUrl)
+
+  if (hubError) {
+    const description = params.get('error_description')
+    set({ oauthError: `The hub returned: ${description || hubError}` })
+    return
+  }
+  if (!loadPending()) {
+    // Stale or bookmarked callback — init() already restored any saved session.
+    return
+  }
+
+  set({ oauthStatus: 'completing', oauthError: null, approveUrl: null })
+  try {
+    const { pending, token } = await completeOAuth(code!, oauthState!)
+    const vaultUrl = resolveVaultUrl(token, pending.issuerUrl)
+    adoptSession({
+      vaultUrl,
+      mode: 'oauth',
+      issuer: pending.issuer,
+      tokenEndpoint: pending.tokenEndpoint,
+      clientId: pending.clientId,
+      token: storedFromTokenResponse(token),
+    })
+    set({ oauthStatus: 'idle' })
+  } catch (e) {
+    if (e instanceof PendingApprovalError) {
+      set({ oauthStatus: 'idle', approveUrl: e.approveUrl })
+    } else {
+      set({
+        oauthStatus: 'idle',
+        oauthError: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+}
+
+/** Primary path: kick off the OAuth redirect dance. */
+export async function startOAuth(vaultInput: string): Promise<void> {
+  set({ oauthError: null, approveUrl: null })
+  const url = normalizeVaultUrl(vaultInput)
+  localStorage.setItem(LAST_URL_KEY, url)
+  const authorizeUrl = await beginOAuth(url) // throws with a precise message
+  window.location.assign(authorizeUrl)
+}
+
+/** Advanced path: paste a bearer token (kept from v1). */
+export async function connectWithToken(url: string, token: string): Promise<void> {
+  const vaultUrl = normalizeVaultUrl(url)
+  const session: AuthSession = {
+    vaultUrl,
+    mode: 'token',
+    token: { accessToken: token.trim() },
+  }
+  const probeManager = new AuthManager(session, () => {})
+  await new VaultApi(probeManager).ping() // throws with a precise message
+  localStorage.setItem(LAST_URL_KEY, vaultUrl)
+  adoptSession(session)
+}
+
+/** Clears ALL stored auth: session, refresh material, pending flow, client ids. */
+export function disconnect(): void {
+  localStorage.removeItem(SESSION_KEY)
+  localStorage.removeItem(LEGACY_CONFIG_KEY)
+  clearPending()
+  clearCachedClients()
+  api = null
+  manager = null
+  set({
+    session: null,
     connection: 'idle',
+    oauthStatus: 'idle',
+    oauthError: null,
+    approveUrl: null,
     notes: {},
     scripts: null,
     scriptsStatus: 'idle',
     scriptsError: null,
     tags: [],
   })
+}
+
+export function dismissOAuthNotices(): void {
+  set({ oauthError: null, approveUrl: null })
 }
 
 // ---------------------------------------------------------------------------
