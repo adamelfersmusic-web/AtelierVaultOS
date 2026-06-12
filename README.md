@@ -62,6 +62,13 @@ npm run build      # typecheck (tsc -b) + production build
 npm run test:e2e   # full browser drive against the mock (run build first)
 ```
 
+The same 14-scenario drive can run against a **genuine** parachute-vault
+server (e.g. a local checkout booted with `VAULT_AUTH_TOKEN`):
+
+```bash
+REAL_VAULT=http://127.0.0.1:8790/vault/<name> REAL_TOKEN=<bearer> npm run test:e2e
+```
+
 ## Architecture
 
 ```

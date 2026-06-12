@@ -1,26 +1,88 @@
-// End-to-end drive of the whole product against the mock vault (which
-// replicates the live Parachute REST contract, including optimistic
-// concurrency). Run with `npm run test:e2e` after `npm run build`.
+// End-to-end drive of the whole product. By default it runs against the
+// mock vault (which replicates the live Parachute REST contract, including
+// optimistic concurrency): `npm run test:e2e` after `npm run build`.
+//
+// Set REAL_VAULT=<vault-url> REAL_TOKEN=<bearer> to run the SAME journeys
+// against a genuine parachute-vault server (e.g. a local checkout booted
+// with VAULT_AUTH_TOKEN) — the out-of-band writer + state assertions then
+// go through the real REST API instead of the mock's control plane.
 
 import { test, expect, type Page } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
+import { makeSeed } from './seed.mjs'
 
+const REAL = process.env.REAL_VAULT
 const MOCK = 'http://127.0.0.1:8787'
-const TOKEN = 'atelier-test-token'
+const VAULT_URL = REAL || MOCK
+const TOKEN = REAL ? (process.env.REAL_TOKEN ?? '') : 'atelier-test-token'
 const SHOTS = 'e2e/.shots'
+const AUTH = { Authorization: `Bearer ${TOKEN}` }
 
 mkdirSync(SHOTS, { recursive: true })
 
 async function resetVault(page: Page) {
-  await page.request.post(`${MOCK}/__test/reset`)
+  if (!REAL) {
+    await page.request.post(`${MOCK}/__test/reset`)
+    return
+  }
+  // Real server: wipe and re-seed through the genuine REST API.
+  const list = await page.request.get(
+    `${VAULT_URL}/api/notes?limit=1000`,
+    { headers: AUTH },
+  )
+  for (const n of (await list.json()) as { id: string }[]) {
+    await page.request.delete(
+      `${VAULT_URL}/api/notes/${encodeURIComponent(n.id)}`,
+      { headers: AUTH },
+    )
+  }
+  const created = await page.request.post(`${VAULT_URL}/api/notes`, {
+    headers: AUTH,
+    data: {
+      notes: makeSeed().map(({ path, content, tags, metadata, createdAt }) => ({
+        path,
+        content,
+        tags,
+        metadata,
+        created_at: createdAt,
+      })),
+    },
+  })
+  expect(created.status(), await created.text()).toBe(201)
 }
 
+/** Read a note's live state out of the vault (bypassing the app). */
 async function mockNote(page: Page, path: string) {
-  const res = await page.request.get(
-    `${MOCK}/__test/note?path=${encodeURIComponent(path)}`,
-  )
+  const res = REAL
+    ? await page.request.get(
+        `${VAULT_URL}/api/notes?id=${encodeURIComponent(path)}&include_content=true`,
+        { headers: AUTH },
+      )
+    : await page.request.get(
+        `${MOCK}/__test/note?path=${encodeURIComponent(path)}`,
+      )
   expect(res.ok()).toBeTruthy()
   return res.json()
+}
+
+/** Simulate an out-of-band writer (another agent) touching a note. */
+async function bumpNote(
+  page: Page,
+  path: string,
+  data: { content?: string; metadata?: Record<string, unknown> },
+) {
+  if (!REAL) {
+    const res = await page.request.post(`${MOCK}/__test/bump`, {
+      data: { path, ...data },
+    })
+    expect(res.ok()).toBeTruthy()
+    return
+  }
+  const res = await page.request.patch(
+    `${VAULT_URL}/api/notes/${encodeURIComponent(path)}`,
+    { headers: AUTH, data: { ...data, force: true } },
+  )
+  expect(res.ok(), await res.text()).toBeTruthy()
 }
 
 /** Pre-authorize the app by seeding localStorage before any script runs. */
@@ -29,7 +91,7 @@ async function connectViaStorage(page: Page) {
     ([url, token]) => {
       localStorage.setItem('atelier.vault', JSON.stringify({ url, token }))
     },
-    [MOCK, TOKEN] as const,
+    [VAULT_URL, TOKEN] as const,
   )
 }
 
@@ -48,7 +110,7 @@ test('connect screen: validates the token against the vault', async ({ page }) =
   await expect(page).toHaveURL(/#\/connect/)
   await page.screenshot({ path: `${SHOTS}/01-connect.png` })
 
-  await page.fill('input[name="vault-url"]', MOCK)
+  await page.fill('input[name="vault-url"]', VAULT_URL)
   await page.fill('textarea[name="vault-token"]', 'wrong-token')
   await page.click('button:has-text("Connect")')
   await expect(page.locator('.connect-error')).toBeVisible()
@@ -59,7 +121,7 @@ test('connect screen: validates the token against the vault', async ({ page }) =
   await expect(page.locator('.db-table tbody tr').first()).toBeVisible()
   // Config persisted for the next session.
   const stored = await page.evaluate(() => localStorage.getItem('atelier.vault'))
-  expect(JSON.parse(stored!)).toEqual({ url: MOCK, token: TOKEN })
+  expect(JSON.parse(stored!)).toEqual({ url: VAULT_URL, token: TOKEN })
 })
 
 test('table: rows, sorting, pipeline filter, field filter, search', async ({ page }) => {
@@ -139,8 +201,8 @@ test('cell edit survives a concurrent writer (409 → reload → reconcile → r
   await openScripts(page)
   // Another agent touches the note after our table loaded — our cached
   // updatedAt is now stale, so the first PATCH must 409 and reconcile.
-  await page.request.post(`${MOCK}/__test/bump`, {
-    data: { path: 'content/scripts/the-fake-map', metadata: { pillar: 'income' } },
+  await bumpNote(page, 'content/scripts/the-fake-map', {
+    metadata: { pillar: 'income' },
   })
 
   const row = page.locator('.db-table tbody tr', { hasText: 'The Fake Map' })
@@ -201,8 +263,8 @@ test('body save auto-reconciles when only metadata moved elsewhere', async ({ pa
   await editor.pressSequentially('\nAppended while someone re-tagged.')
 
   // A concurrent writer changes metadata only — content untouched.
-  await page.request.post(`${MOCK}/__test/bump`, {
-    data: { path: 'content/scripts/the-fake-map', metadata: { conviction: 'strong' } },
+  await bumpNote(page, 'content/scripts/the-fake-map', {
+    metadata: { conviction: 'strong' },
   })
 
   await page.getByTestId('save-body').click()
@@ -221,11 +283,8 @@ test('body conflict: diverged content needs a human decision', async ({ page }) 
   await editor.pressSequentially('\nMy edit.')
 
   // The content itself diverged in the vault.
-  await page.request.post(`${MOCK}/__test/bump`, {
-    data: {
-      path: 'content/scripts/the-fake-map',
-      content: '# The Fake Map\n\nRewritten elsewhere while you were editing.\n',
-    },
+  await bumpNote(page, 'content/scripts/the-fake-map', {
+    content: '# The Fake Map\n\nRewritten elsewhere while you were editing.\n',
   })
 
   await page.getByTestId('save-body').click()
@@ -360,7 +419,7 @@ test('capture: a new script lands in the vault with script defaults', async ({ p
 
   await expect(page.locator('.note-title')).toHaveText('The Second Alarm Clock')
   const note = await mockNote(page, 'content/scripts/the-second-alarm-clock')
-  expect(note.tags).toEqual(['content/script', 'type/content'])
+  expect([...note.tags].sort()).toEqual(['content/script', 'type/content'])
   expect(note.metadata.status).toBe('idea')
   expect(note.metadata.recorded).toBe('no')
   expect(note.metadata.source).toBe('brainstorm')
