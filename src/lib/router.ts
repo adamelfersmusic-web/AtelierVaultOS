@@ -9,6 +9,7 @@ export type Route =
   | { kind: 'scripts'; lens?: LensKind }
   | { kind: 'note'; path: string }
   | { kind: 'library' }
+  | { kind: 'graph' }
 
 export function parseHash(hash: string): Route {
   const h = hash.replace(/^#\/?/, '')
@@ -22,6 +23,8 @@ export function parseHash(hash: string): Route {
     }
     case 'library':
       return { kind: 'library' }
+    case 'graph':
+      return { kind: 'graph' }
     case 'scripts': {
       const lens = rest[0]
       if (lens === 'table' || lens === 'board' || lens === 'gallery') {
@@ -42,6 +45,8 @@ export function hrefFor(route: Route): string {
       return route.lens ? `#/scripts/${route.lens}` : '#/scripts'
     case 'library':
       return '#/library'
+    case 'graph':
+      return '#/graph'
     case 'note':
       return `#/note/${route.path.split('/').map(encodeURIComponent).join('/')}`
   }

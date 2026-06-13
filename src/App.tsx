@@ -7,6 +7,7 @@ import { ConnectView } from './views/ConnectView'
 import { DatabaseView } from './views/DatabaseView'
 import { NotePage } from './views/NotePage'
 import { LibraryView } from './views/LibraryView'
+import { GraphView } from './views/GraphView'
 import { NewScriptModal } from './views/NewScriptModal'
 import { CommandPalette } from './components/CommandPalette'
 import { ToastHost } from './components/Toast'
@@ -63,6 +64,17 @@ export default function App() {
     return (
       <>
         <ConnectView />
+        <ToastHost />
+      </>
+    )
+  }
+
+  // The graph is full-bleed: the sidebar collapses away entirely.
+  if (route.kind === 'graph') {
+    return (
+      <>
+        <GraphView />
+        {ui.paletteOpen && <CommandPalette />}
         <ToastHost />
       </>
     )

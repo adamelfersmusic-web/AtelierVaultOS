@@ -8,3 +8,4 @@ e2e/.shots
 
 tsconfig.node.tsbuildinfo
 *.tsbuildinfo
+e2e/real-graph/

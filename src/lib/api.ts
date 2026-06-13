@@ -176,6 +176,20 @@ export class VaultApi {
     return this.request<TagInfo[]>('GET', '/tags')
   }
 
+  /**
+   * The whole vault as a graph: every note (lean) with its hydrated links
+   * and link degree. One call — the graph view's only data dependency.
+   */
+  async graphNotes(limit = 300): Promise<Note[]> {
+    const p = new URLSearchParams({
+      include_links: 'true',
+      include_link_count: 'true',
+      include_content: 'false',
+      limit: String(limit),
+    })
+    return this.request<Note[]>('GET', `/notes?${p.toString()}`)
+  }
+
   async createNote(input: {
     path: string
     content: string

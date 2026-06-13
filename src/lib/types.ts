@@ -4,6 +4,13 @@
 
 export type NoteMetadata = Record<string, unknown>
 
+/** A vault link edge (hydrated endpoint summaries omitted — ids suffice). */
+export interface VaultLink {
+  sourceId: string
+  targetId: string
+  relationship: string
+}
+
 export interface Note {
   id: string
   path: string
@@ -19,6 +26,10 @@ export interface Note {
   updatedAt: string
   /** Echoed by PATCH `if_missing: "create"` responses. */
   created?: boolean
+  /** Present when include_links=true. */
+  links?: VaultLink[]
+  /** Link degree (inbound + outbound), present when include_link_count=true. */
+  linkCount?: number
 }
 
 export interface TagInfo {
