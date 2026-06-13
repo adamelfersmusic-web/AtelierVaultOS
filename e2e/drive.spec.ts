@@ -131,6 +131,18 @@ test('connect screen: token paste lives under Advanced and validates', async ({ 
   })
 })
 
+test('top bar: Brand Brain links out to the project in a new tab', async ({ page }) => {
+  await openScripts(page)
+  const link = page.getByRole('link', { name: 'Brand Brain' })
+  await expect(link).toBeVisible()
+  await expect(link).toHaveAttribute(
+    'href',
+    'https://claude.ai/project/019df26a-e720-77a8-bfd1-1be88ba75aef',
+  )
+  await expect(link).toHaveAttribute('target', '_blank')
+  await expect(link).toHaveAttribute('rel', /noreferrer/)
+})
+
 test('table: rows, sorting, pipeline filter, field filter, search', async ({ page }) => {
   await openScripts(page)
   const rows = page.locator('.db-table tbody tr')
