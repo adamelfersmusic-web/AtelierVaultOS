@@ -94,6 +94,18 @@ export function makeSeed() {
       { status: 'active' },
       `# Sample Lead\n\nMet through the woods video. Wants the discovery call.\n`,
     ),
+    // A malformed note exactly as the live vault can return it: NO metadata
+    // object and NO tags at all. This is the shape that crashed the graph
+    // ("Cannot read properties of undefined (reading 'verification')").
+    // Kept in the seed as a permanent regression guard for buildGraph.
+    {
+      id: noteId(),
+      path: 'logs/raw-orphan-no-metadata',
+      extension: 'md',
+      content: `# Raw Orphan\n\nNo metadata, no tags — should render as faint, not crash.\n`,
+      createdAt: '2026-06-01T15:11:05.000Z',
+      updatedAt: '2026-06-08T10:00:00.000Z',
+    },
   ]
 }
 

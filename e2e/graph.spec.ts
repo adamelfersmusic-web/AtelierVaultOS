@@ -1,4 +1,4 @@
-// Knowledge-graph drive against the mock vault's seed (21 notes, 18 links —
+// Knowledge-graph drive against the mock vault's seed (22 notes, 18 links —
 // shaped like the real vault: a transcript hub, one canon bloom, a
 // supersedes edge, orphans at the rim). Mock-only; skipped in REAL_VAULT mode.
 
@@ -35,8 +35,12 @@ test('graph nav: sidebar entry, full-bleed canvas, all notes load as nodes', asy
   await openGraph(page)
   // The sidebar collapses — full canvas.
   await expect(page.locator('.rail')).toHaveCount(0)
-  await expect(page.getByTestId('graph-stats')).toHaveText('21 notes · 18 links')
-  await expect(page.locator('.gnode')).toHaveCount(21)
+  await expect(page.getByTestId('graph-stats')).toHaveText('22 notes · 18 links')
+  await expect(page.locator('.gnode')).toHaveCount(22)
+  // The malformed seed note (no metadata, no tags) renders faint, not a crash.
+  await expect(
+    page.locator('.gnode[data-path="logs/raw-orphan-no-metadata"]'),
+  ).toHaveCount(1)
   // Hub labels only (degree ≥ 8): exactly the transcript hub in this seed.
   await expect(page.locator('.gnode-label')).toHaveCount(1)
   await expect(page.locator('.gnode-label')).toHaveText('California Day One')
@@ -60,7 +64,7 @@ test('axis toggle remaps color and adds the verification ring', async ({ page })
   await page.click('.graph-axis-btn:has-text("Domain")')
   // domain/analytics → red, and every node gains a verification ring.
   await expect(core).toHaveAttribute('fill', '#C4445A')
-  await expect(page.locator('.gnode-ring')).toHaveCount(21)
+  await expect(page.locator('.gnode-ring')).toHaveCount(22)
   await expect(page.getByTestId('graph-legend')).toContainText('analytics')
 
   await page.click('.graph-axis-btn:has-text("Lifecycle")')

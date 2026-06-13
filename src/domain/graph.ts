@@ -199,26 +199,36 @@ export function edgeColor(relationship: string): string {
 export function buildGraph(notes: Note[]): GraphData {
   const byId = new Map(notes.map((n) => [n.id, n]))
   const maxDegree = Math.max(1, ...notes.map((n) => n.linkCount ?? 0))
-  const nodes: GraphNode[] = notes.map((n, i) => ({
-    id: n.id,
-    path: n.path,
-    tags: n.tags,
-    verification:
-      typeof n.metadata['verification'] === 'string'
-        ? (n.metadata['verification'] as string)
-        : null,
-    degree: n.linkCount ?? 0,
-    x: 0,
-    y: 0,
-    r: radiusFor(n.linkCount ?? 0, maxDegree),
-    phase: (i * 137.5 * Math.PI) / 180, // golden-angle phases for the drift
-  }))
+  const nodes: GraphNode[] = notes.map((n, i) => {
+    // Defensive: the live vault can return a note with no `metadata` object
+    // at all (and, in principle, no `tags`/`path`). The lean Note type says
+    // these are always present, but real responses don't always honor that —
+    // reading `n.metadata['verification']` off an undefined metadata was the
+    // graph-load crash. Normalize once here so every downstream consumer
+    // (color axes, tooltip, labels) sees well-formed values.
+    const meta = n.metadata ?? {}
+    const tags = n.tags ?? []
+    const v = meta['verification']
+    return {
+      id: n.id,
+      path: n.path ?? n.id,
+      tags,
+      // No stamp → null, which renders as the faint "unverified" tier
+      // (verificationColor maps both null and "UNVERIFIED" to the same light).
+      verification: typeof v === 'string' && v ? v : null,
+      degree: n.linkCount ?? 0,
+      x: 0,
+      y: 0,
+      r: radiusFor(n.linkCount ?? 0, maxDegree),
+      phase: (i * 137.5 * Math.PI) / 180, // golden-angle phases for the drift
+    }
+  })
 
   const seen = new Set<string>()
   const edges: GraphEdge[] = []
   for (const n of notes) {
     for (const l of n.links ?? []) {
-      if (!byId.has(l.sourceId) || !byId.has(l.targetId)) continue
+      if (!l || !byId.has(l.sourceId) || !byId.has(l.targetId)) continue
       const key = `${l.sourceId}→${l.targetId}→${l.relationship}`
       if (seen.has(key)) continue
       seen.add(key)
