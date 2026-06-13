@@ -6,6 +6,7 @@ import {
   IconDisconnect,
   IconGraph,
   IconLibrary,
+  IconPage,
   IconPlus,
   IconScripts,
 } from '../components/Icons'
@@ -66,6 +67,13 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
           >
             <IconScripts size={15} />
             Scripts
+          </a>
+          <a
+            className={`rail-link${route.kind === 'pages' ? ' is-active' : ''}`}
+            href="#/pages"
+          >
+            <IconPage size={15} />
+            Pages
           </a>
           <a
             className={`rail-link${route.kind === 'graph' ? ' is-active' : ''}`}

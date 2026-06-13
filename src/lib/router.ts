@@ -10,6 +10,7 @@ export type Route =
   | { kind: 'note'; path: string }
   | { kind: 'library' }
   | { kind: 'graph' }
+  | { kind: 'pages'; path?: string }
 
 export function parseHash(hash: string): Route {
   const h = hash.replace(/^#\/?/, '')
@@ -25,6 +26,12 @@ export function parseHash(hash: string): Route {
       return { kind: 'library' }
     case 'graph':
       return { kind: 'graph' }
+    case 'pages': {
+      // Reuse the note case's per-segment decode, keeping raw slashes so the
+      // page's full vault path (pages/<slug>) reads naturally in the hash.
+      const path = rest.map(decodeURIComponent).join('/')
+      return path ? { kind: 'pages', path } : { kind: 'pages' }
+    }
     case 'scripts': {
       const lens = rest[0]
       if (lens === 'table' || lens === 'board' || lens === 'gallery') {
@@ -47,6 +54,10 @@ export function hrefFor(route: Route): string {
       return '#/library'
     case 'graph':
       return '#/graph'
+    case 'pages':
+      return route.path
+        ? `#/pages/${route.path.split('/').map(encodeURIComponent).join('/')}`
+        : '#/pages'
     case 'note':
       return `#/note/${route.path.split('/').map(encodeURIComponent).join('/')}`
   }

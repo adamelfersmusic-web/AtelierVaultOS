@@ -30,6 +30,7 @@ import {
   type TagInfo,
 } from './types'
 import { SCRIPTS_DB } from '../domain/scripts'
+import { PAGES_PREFIX, NEW_PAGE, newPageContent } from '../domain/pages'
 
 const SESSION_KEY = 'atelier.session.v1'
 const LEGACY_CONFIG_KEY = 'atelier.vault' // v1 token-paste config, migrated on load
@@ -58,6 +59,10 @@ export interface StoreState {
   scripts: string[] | null
   scriptsStatus: 'idle' | 'loading' | 'ready' | 'error'
   scriptsError: string | null
+  /** Paths of the pages dataset, newest-first. */
+  pages: string[] | null
+  pagesStatus: 'idle' | 'loading' | 'ready' | 'error'
+  pagesError: string | null
   tags: TagInfo[]
   toasts: ToastItem[]
   /** Paths with an in-flight write (drives the saving pulse). */
@@ -130,6 +135,9 @@ let state: StoreState = {
   scripts: null,
   scriptsStatus: 'idle',
   scriptsError: null,
+  pages: null,
+  pagesStatus: 'idle',
+  pagesError: null,
   tags: [],
   toasts: [],
   saving: {},
@@ -206,6 +214,8 @@ function adoptSession(session: AuthSession): void {
     oauthError: null,
     approveUrl: null,
     scriptsStatus: 'idle',
+    pages: null,
+    pagesStatus: 'idle',
     notes: {},
   })
   void loadScripts()
@@ -309,6 +319,9 @@ export function disconnect(): void {
     scripts: null,
     scriptsStatus: 'idle',
     scriptsError: null,
+    pages: null,
+    pagesStatus: 'idle',
+    pagesError: null,
     tags: [],
   })
 }
@@ -678,5 +691,86 @@ export async function createScript(input: {
   } catch (e) {
     handleAuthFailure(e)
     throw e
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pages — freeform block-editor notes under pages/ (mirrors scripts)
+// ---------------------------------------------------------------------------
+
+export async function loadPages(): Promise<void> {
+  if (!api || state.pagesStatus === 'loading') return
+  set({ pagesStatus: 'loading', pagesError: null })
+  try {
+    const list = await requireApi().listByPrefix(PAGES_PREFIX)
+    mergeNotes(list)
+    const sorted = [...list].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+    set({ pages: sorted.map((n) => n.path), pagesStatus: 'ready' })
+  } catch (e) {
+    handleAuthFailure(e)
+    set({
+      pagesStatus: 'error',
+      pagesError: e instanceof Error ? e.message : String(e),
+    })
+  }
+}
+
+export async function createPage(input: { title: string }): Promise<Note> {
+  const a = requireApi()
+  const slug = slugify(input.title) || 'untitled'
+  const prefix = NEW_PAGE.pathPrefix
+  let path = `${prefix}${slug}`
+  for (let n = 2; (await a.getNote(path)) !== null; n++) {
+    path = `${prefix}${slug}-${n}`
+    if (n > 30) throw new Error('Could not find a free path for this title')
+  }
+  try {
+    const note = await a.createNote({
+      path,
+      content: newPageContent(input.title),
+      tags: [...NEW_PAGE.tags],
+      metadata: { ...NEW_PAGE.metadata },
+    })
+    mergeNote(note)
+    // Newest-first in the sidebar.
+    set({
+      pages: [note.path, ...(state.pages ?? []).filter((p) => p !== note.path)],
+    })
+    return note
+  } catch (e) {
+    handleAuthFailure(e)
+    throw e
+  }
+}
+
+export async function deletePage(path: string): Promise<void> {
+  try {
+    await requireApi().deleteNote(path)
+  } catch (e) {
+    handleAuthFailure(e)
+    throw e
+  }
+  const notes = { ...state.notes }
+  delete notes[path]
+  set({ notes, pages: (state.pages ?? []).filter((p) => p !== path) })
+}
+
+// ---------------------------------------------------------------------------
+// Vault access for the /ai block's MCP connection — exposes a token + base
+// URL only, never the AuthManager itself.
+// ---------------------------------------------------------------------------
+
+/** The active vault's base URL (e.g. https://hub/vault/jonathan), or null. */
+export function vaultBaseUrl(): string | null {
+  return manager ? manager.vaultBase : null
+}
+
+/** A live vault access token for the MCP connection, refreshed if near expiry. */
+export async function vaultAccessToken(): Promise<string | null> {
+  if (!manager) return null
+  try {
+    return await manager.getAccessToken()
+  } catch {
+    return null
   }
 }
