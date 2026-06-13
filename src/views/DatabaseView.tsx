@@ -14,12 +14,16 @@ import {
   IconGallery,
   IconPlus,
   IconRefresh,
+  IconSpark,
   IconTable,
   IconBack,
 } from '../components/Icons'
 import { TableLens } from './TableLens'
 import { BoardLens } from './BoardLens'
 import { GalleryLens } from './GalleryLens'
+
+// The brand's source-of-truth project, opened in a new tab from the top bar.
+const BRAND_BRAIN_URL = 'https://claude.ai/project/019df26a-e720-77a8-bfd1-1be88ba75aef'
 
 export interface Row {
   path: string
@@ -347,6 +351,16 @@ export function DatabaseView({
             <IconRefresh size={14} />
           </button>
           <div className="db-actions">
+            <a
+              className="btn btn-brand"
+              href={BRAND_BRAIN_URL}
+              target="_blank"
+              rel="noreferrer"
+              title="Open the Brand Brain project in a new tab"
+            >
+              <IconSpark size={13} />
+              Brand Brain
+            </a>
             <input
               className="db-search"
               placeholder="Search scripts…"

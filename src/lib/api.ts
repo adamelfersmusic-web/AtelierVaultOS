@@ -122,6 +122,18 @@ export class VaultApi {
     }
   }
 
+  /**
+   * Guarantee the shape the rest of the app relies on. The lean Note type
+   * says `tags`/`metadata` are always present, but real vault responses can
+   * omit them on a note with no tags or no metadata — and an unguarded
+   * `note.tags.slice()` / `note.metadata[k]` then throws deep in a view.
+   * Normalizing once at the boundary makes the type honest everywhere.
+   */
+  private static normalize(n: Note): Note {
+    if (n.tags && n.metadata) return n
+    return { ...n, tags: n.tags ?? [], metadata: n.metadata ?? {} }
+  }
+
   /** Cheap connectivity + auth probe. */
   async ping(): Promise<void> {
     await this.request<Note[]>('GET', '/notes?limit=1')
@@ -132,9 +144,11 @@ export class VaultApi {
     try {
       // The collection route's ?id= form accepts raw slashes in the query
       // string, so it is the safest single-note read across deployments.
-      return await this.request<Note>(
-        'GET',
-        `/notes?id=${encodeURIComponent(idOrPath)}&include_content=true`,
+      return VaultApi.normalize(
+        await this.request<Note>(
+          'GET',
+          `/notes?id=${encodeURIComponent(idOrPath)}&include_content=true`,
+        ),
       )
     } catch (e) {
       if (e instanceof VaultError && e.status === 404) return null
@@ -149,7 +163,9 @@ export class VaultApi {
       limit: String(limit),
       include_content: 'false',
     })
-    return this.request<Note[]>('GET', `/notes?${p.toString()}`)
+    return (await this.request<Note[]>('GET', `/notes?${p.toString()}`)).map(
+      VaultApi.normalize,
+    )
   }
 
   /** Full-text search across the vault (lean shape). */
@@ -159,7 +175,9 @@ export class VaultApi {
       limit: String(limit),
       include_content: 'false',
     })
-    return this.request<Note[]>('GET', `/notes?${p.toString()}`)
+    return (await this.request<Note[]>('GET', `/notes?${p.toString()}`)).map(
+      VaultApi.normalize,
+    )
   }
 
   /** Most recently created notes, vault-wide (lean shape). */
@@ -169,7 +187,9 @@ export class VaultApi {
       sort: 'desc',
       include_content: 'false',
     })
-    return this.request<Note[]>('GET', `/notes?${p.toString()}`)
+    return (await this.request<Note[]>('GET', `/notes?${p.toString()}`)).map(
+      VaultApi.normalize,
+    )
   }
 
   async listTags(): Promise<TagInfo[]> {
@@ -187,7 +207,9 @@ export class VaultApi {
       include_content: 'false',
       limit: String(limit),
     })
-    return this.request<Note[]>('GET', `/notes?${p.toString()}`)
+    return (await this.request<Note[]>('GET', `/notes?${p.toString()}`)).map(
+      VaultApi.normalize,
+    )
   }
 
   async createNote(input: {
@@ -196,7 +218,7 @@ export class VaultApi {
     tags: string[]
     metadata: NoteMetadata
   }): Promise<Note> {
-    return this.request<Note>('POST', '/notes', input)
+    return VaultApi.normalize(await this.request<Note>('POST', '/notes', input))
   }
 
   /**
@@ -217,8 +239,9 @@ export class VaultApi {
     if (patch.content !== undefined) body.content = patch.content
     if (patch.metadata !== undefined) body.metadata = patch.metadata
     if (patch.tags !== undefined) body.tags = patch.tags
-    return this.withNoteRoute(idOrPath, (enc) =>
+    const updated = await this.withNoteRoute(idOrPath, (enc) =>
       this.request<Note>('PATCH', `/notes/${enc}`, body),
     )
+    return VaultApi.normalize(updated)
   }
 }
