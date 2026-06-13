@@ -1,0 +1,313 @@
+/* ————————————————————————— knowledge graph ————————————————————————— */
+
+.graph-stage {
+  position: fixed;
+  inset: 0;
+  background: #020202; /* darker than the app canvas — colors read vivid */
+  overflow: hidden;
+}
+
+.graph-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+.graph-svg:active {
+  cursor: grabbing;
+}
+
+/* edges arrive after the nodes have flown out */
+.graph-edges {
+  opacity: 0;
+  transition: opacity 1.1s ease;
+}
+.graph-edges.is-on {
+  opacity: 1;
+}
+
+.gnode {
+  cursor: pointer;
+}
+.gnode-core {
+  transition:
+    fill 0.45s var(--ease-spring),
+    fill-opacity 0.45s var(--ease-spring);
+}
+.gnode-ring {
+  transition: stroke-opacity 0.45s var(--ease-spring);
+}
+.gnode:hover .gnode-core {
+  fill-opacity: 1;
+}
+
+/* the canon bloom fades in last — 0.3s after the constellation settles */
+.gnode-bloom {
+  opacity: 0;
+  transition: opacity 0.9s ease 0.3s;
+}
+.gnode-bloom.is-on {
+  opacity: 0.6;
+}
+
+.gnode-label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  fill: #ece5d8;
+  fill-opacity: 0.5;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ——— overlays ——— */
+
+.graph-topbar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.graph-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  background: rgba(23, 21, 19, 0.72);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(4px);
+  transition: 0.13s ease;
+}
+.graph-back:hover {
+  color: var(--gold-bright);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+}
+
+.graph-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  color: var(--ink-2);
+  letter-spacing: 0.01em;
+  user-select: none;
+}
+
+.graph-axes {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  background: rgba(23, 21, 19, 0.72);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  padding: 3px;
+  backdrop-filter: blur(4px);
+}
+.graph-axes-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 4);
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  transition: transform 0.25s var(--ease-spring);
+}
+.graph-axis-btn {
+  position: relative;
+  padding: 4px 13px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--ink-3);
+  border-radius: 7px;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+.graph-axis-btn:hover {
+  color: var(--ink-2);
+}
+.graph-axis-btn.is-active {
+  color: var(--gold-bright);
+}
+
+.graph-legend {
+  position: absolute;
+  left: 16px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--ink-3);
+  user-select: none;
+}
+.graph-legend-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.graph-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.graph-stats {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  font-size: 11px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+/* ——— tooltip ——— */
+
+.graph-tooltip {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #1a1917;
+  border: 1px solid color-mix(in srgb, var(--gold) 38%, transparent);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-pop);
+  padding: 7px 11px;
+  max-width: 240px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+.graph-tooltip-title {
+  color: var(--ink);
+  font-weight: 560;
+  line-height: 1.35;
+}
+.graph-tooltip-tag {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+/* ——— loading: a star condensing ——— */
+
+.graph-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.graph-pulse {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+.graph-pulse-core {
+  position: absolute;
+  inset: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--gold) 80%, transparent);
+  animation: pulse-core 1.6s ease-in-out infinite;
+}
+.graph-pulse-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  animation: pulse-ring 2.4s ease-out infinite;
+}
+.graph-pulse-ring.r2 {
+  animation-delay: 1.2s;
+}
+
+@keyframes pulse-core {
+  50% {
+    transform: scale(1.35);
+  }
+}
+@keyframes pulse-ring {
+  from {
+    transform: scale(0.18);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+/* ——— note drawer (the existing note page, slid in) ——— */
+
+.graph-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(2, 2, 2, 0.45);
+  animation: fade-in 0.18s ease;
+}
+
+.graph-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  width: 640px;
+  max-width: calc(100vw - 56px);
+  background: var(--bg);
+  border-left: 1px solid var(--line-strong);
+  box-shadow: -24px 0 64px rgba(0, 0, 0, 0.6);
+  overflow-y: auto;
+  animation: drawer-in 0.32s var(--ease-spring);
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(46px);
+    opacity: 0;
+  }
+}
+
+.graph-drawer-close {
+  position: sticky;
+  top: 12px;
+  margin-left: 14px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+}
+.graph-drawer-close:hover {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}

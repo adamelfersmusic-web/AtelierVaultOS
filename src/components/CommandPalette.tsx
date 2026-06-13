@@ -11,6 +11,7 @@ import {
   IconBoard,
   IconDisconnect,
   IconGallery,
+  IconGraph,
   IconLibrary,
   IconPlus,
   IconScripts,
@@ -65,6 +66,13 @@ export function CommandPalette() {
         label: 'Scripts · Gallery',
         icon: <IconGallery size={14} />,
         run: () => navigate({ kind: 'scripts', lens: 'gallery' }),
+      },
+      {
+        key: 'graph',
+        group: 'actions',
+        label: 'Graph — the vault as a constellation',
+        icon: <IconGraph size={14} />,
+        run: () => navigate({ kind: 'graph' }),
       },
       {
         key: 'library',

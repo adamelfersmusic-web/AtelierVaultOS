@@ -39,6 +39,18 @@ export const IconScripts = (p: IconProps = {}) =>
     p,
   )
 
+export const IconGraph = (p: IconProps = {}) =>
+  svg(
+    <>
+      <circle cx="4" cy="11.5" r="2" />
+      <circle cx="11.8" cy="3.8" r="1.8" />
+      <circle cx="12.2" cy="12.2" r="1.4" />
+      <circle cx="6.8" cy="5.2" r="1.1" />
+      <path d="M5.5 10.2 6.4 6.3M7.9 4.9l2.2-.7M5.9 11.1l4.9 .9M12 5.6l.2 5.2" />
+    </>,
+    p,
+  )
+
 export const IconLibrary = (p: IconProps = {}) =>
   svg(
     <>

@@ -6,6 +6,7 @@ import './styles/tokens.css'
 import './styles/base.css'
 import './styles/components.css'
 import './styles/views.css'
+import './styles/graph.css'
 import { init } from './lib/store'
 import App from './App'
 

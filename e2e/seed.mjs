@@ -84,18 +84,43 @@ export function makeSeed() {
     ),
     note(
       'intel/the-analytics-gap',
-      ['intel'],
+      ['intel', 'domain/analytics', 'todo'],
       { verification: 'ANALYSIS-VERIFIED', voice: 'operator' },
       `# The Analytics Gap\n\nThe data exists; we just don't own or capture it yet.\n`,
     ),
     note(
       'people/lead/sample-lead',
-      ['people/lead'],
+      ['people/lead', 'domain/recruiting'],
       { status: 'active' },
       `# Sample Lead\n\nMet through the woods video. Wants the discovery call.\n`,
     ),
   ]
 }
+
+// Link edges between seed notes (by path; the mock resolves ids at serve
+// time). Shaped like the real vault: a transcript hub feeding scripts
+// (provenance family → gold), one supersedes (red), wikilinks/related as the
+// neutral mass, and several orphans left to drift at the rim.
+export const LINK_DEFS = [
+  { s: 'content/scripts/the-fake-map', t: 'transcripts/california-day-one', rel: 'sourced-from' },
+  { s: 'content/scripts/bedtime-tuck-in', t: 'transcripts/california-day-one', rel: 'sourced-from' },
+  { s: 'content/scripts/the-bathtub-sales-call', t: 'transcripts/california-day-one', rel: 'derived_from' },
+  { s: 'content/scripts/the-debit-card', t: 'transcripts/california-day-one', rel: 'sourced-from' },
+  { s: 'content/scripts/the-bar-floor', t: 'transcripts/california-day-one', rel: 'source_of' },
+  { s: 'content/scripts/the-provider-truth', t: 'transcripts/california-day-one', rel: 'derived_from' },
+  { s: 'content/scripts/you-only-need-one', t: 'transcripts/california-day-one', rel: 'sourced-from' },
+  { s: 'content/scripts/life-insurance-taught-me-about-being-a-dad', t: 'transcripts/california-day-one', rel: 'sourced-from' },
+  { s: 'brand/05-content-pillars', t: 'content/scripts/the-fake-map', rel: 'informs' },
+  { s: 'brand/05-content-pillars', t: 'content/scripts/the-empty-chair', rel: 'informs' },
+  { s: 'brand/05-content-pillars', t: 'content/scripts/your-kid-stopped-asking', rel: 'informs' },
+  { s: 'content/scripts/the-empty-chair', t: 'content/scripts/founder-raw-rant-on-freedom', rel: 'derived-from' },
+  { s: 'content/scripts/what-the-w2-never-told-you', t: 'content/scripts/quota-vs-bedtime', rel: 'supersedes' },
+  { s: 'intel/the-analytics-gap', t: 'people/lead/sample-lead', rel: 'mentions' },
+  { s: 'intel/the-analytics-gap', t: 'content/scripts/provider-ad-v1', rel: 'references' },
+  { s: 'content/scripts/provider-ad-v1', t: 'content/scripts/conference-room', rel: 'related' },
+  { s: 'content/scripts/three-hundred-short-on-rent', t: 'content/scripts/the-fake-map', rel: 'wikilink' },
+  { s: 'content/scripts/just-because-i-live-in-the-woods', t: 'content/scripts/the-fake-map', rel: 'wikilink' },
+]
 
 export const TAGS = [
   { name: 'content/script', count: 17 },

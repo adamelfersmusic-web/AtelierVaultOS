@@ -402,6 +402,18 @@ export async function recentNotes(): Promise<Note[]> {
   }
 }
 
+export async function fetchGraphNotes(): Promise<Note[]> {
+  try {
+    const results = await requireApi().graphNotes()
+    // Warm the note cache (lean shapes) so clicking a node opens fast.
+    mergeNotes(results)
+    return results
+  } catch (e) {
+    handleAuthFailure(e)
+    throw e
+  }
+}
+
 export async function fetchNote(
   path: string,
   opts: { refresh?: boolean } = {},

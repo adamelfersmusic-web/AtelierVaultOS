@@ -16,15 +16,59 @@
 
 import http from 'node:http'
 import { createHash, randomBytes } from 'node:crypto'
-import { makeSeed, TAGS } from './seed.mjs'
+import { existsSync, readFileSync } from 'node:fs'
+import { makeSeed, LINK_DEFS, TAGS } from './seed.mjs'
 
 const PORT = process.env.MOCK_PORT ? Number(process.env.MOCK_PORT) : 8787
 const TOKEN = 'atelier-test-token'
 const ISSUER = `http://127.0.0.1:${PORT}`
 
-let notes = makeSeed()
+// MOCK_REAL_GRAPH=1 serves a local mirror of the REAL vault's structure
+// (e2e/real-graph/{nodes,edges}.json — gitignored, never committed) so the
+// graph can be visually verified against the genuine 285-note constellation.
+const REAL_GRAPH =
+  process.env.MOCK_REAL_GRAPH === '1' &&
+  existsSync(new URL('./real-graph/nodes.json', import.meta.url)) &&
+  existsSync(new URL('./real-graph/edges.json', import.meta.url))
+
+function makeDataset() {
+  if (!REAL_GRAPH) {
+    return { notes: makeSeed(), linkDefs: LINK_DEFS, byPath: true }
+  }
+  const rg = (f) => JSON.parse(readFileSync(new URL(`./real-graph/${f}`, import.meta.url), 'utf8'))
+  const now = new Date().toISOString()
+  const notes = rg('nodes.json').map((n) => ({
+    id: n.id,
+    path: n.path,
+    extension: 'md',
+    content: `# ${n.path.split('/').pop()}\n\n_Local mirror — body not synced._\n`,
+    tags: n.tags,
+    metadata: n.verification ? { verification: n.verification } : {},
+    createdAt: now,
+    updatedAt: now,
+  }))
+  const linkDefs = rg('edges.json').map((e) => ({ s: e.s, t: e.t, rel: e.rel }))
+  return { notes, linkDefs, byPath: false }
+}
+
+const dataset = makeDataset()
+let notes = dataset.notes
 let lastTs = Date.now()
 let idSeq = 900000
+
+/** Resolve link defs (by path for the seed, by id for the real mirror)
+ * against the live notes array → [{sourceId, targetId, relationship}]. */
+function resolvedLinks() {
+  const key = (n) => (dataset.byPath ? n.path : n.id)
+  const idByKey = new Map(notes.map((n) => [key(n), n.id]))
+  const out = []
+  for (const d of dataset.linkDefs) {
+    const s = idByKey.get(d.s)
+    const t = idByKey.get(d.t)
+    if (s && t) out.push({ sourceId: s, targetId: t, relationship: d.rel })
+  }
+  return out
+}
 
 // ——— OAuth issuer state (mirrors the Parachute hub's protocol surface) ———
 const freshOAuth = () => ({
@@ -122,7 +166,7 @@ const server = http.createServer(async (req, res) => {
 
   // ——— test control plane (no auth) ———
   if (path === '/__test/reset' && req.method === 'POST') {
-    notes = makeSeed()
+    notes = REAL_GRAPH ? makeDataset().notes : makeSeed()
     oauth = freshOAuth()
     return json(res, 200, { ok: true })
   }
@@ -317,7 +361,24 @@ const server = http.createServer(async (req, res) => {
       const limit = Number(url.searchParams.get('limit') ?? 50)
       out = out.slice(0, limit)
       const includeContent = url.searchParams.get('include_content') === 'true'
-      return json(res, 200, includeContent ? out : out.map(lean))
+      let shaped = includeContent ? out : out.map(lean)
+      // Graph enrichments — same field names as the real server.
+      const wantLinks = url.searchParams.get('include_links') === 'true'
+      const wantCount = url.searchParams.get('include_link_count') === 'true'
+      if (wantLinks || wantCount) {
+        const links = resolvedLinks()
+        shaped = shaped.map((n) => {
+          const touching = links.filter(
+            (l) => l.sourceId === n.id || l.targetId === n.id,
+          )
+          return {
+            ...n,
+            ...(wantLinks ? { links: touching } : {}),
+            ...(wantCount ? { linkCount: touching.length } : {}),
+          }
+        })
+      }
+      return json(res, 200, shaped)
     }
 
     if (req.method === 'POST') {

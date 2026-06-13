@@ -41,6 +41,21 @@ Everything auth lives only in this browser's localStorage and rides along as
 session, refresh material, and cached client registrations. Existing v1
 token-paste configs migrate automatically on first load.
 
+## The Graph
+
+`#/graph` renders the whole vault as a full-screen constellation —
+**verification as light**. VERIFIED-CANON notes bloom gold; VERIFIED is
+clear warm ivory; ANALYSIS-VERIFIED dims cooler; unverified matter is
+faint, not yet condensed. Node size follows real link degree (3–14px), hub
+labels appear from degree ≥ 8, provenance edges (`source_of` /
+`derived_from` family) run faint gold and `supersedes` faint red. A pill
+switcher remaps color across four axes — Verification · Domain · Type ·
+Lifecycle — without moving a single node (a thin verification ring keeps
+the light dimension present on every axis). D3-force layout is pre-run to
+rest, the galaxy forms from center on load, and a ±0.3px sine drift keeps
+it breathing. Hover for a tooltip, click to open the full note view in a
+slide-in drawer, drag to pan, scroll to zoom, double-click to re-fit.
+
 ## How writes work
 
 - Every mutation is a `PATCH` with optimistic concurrency: the note's

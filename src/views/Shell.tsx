@@ -4,6 +4,7 @@ import { navigate, type Route } from '../lib/router'
 import { openNewScript, openPalette } from '../lib/ui'
 import {
   IconDisconnect,
+  IconGraph,
   IconLibrary,
   IconPlus,
   IconScripts,
@@ -65,6 +66,13 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
           >
             <IconScripts size={15} />
             Scripts
+          </a>
+          <a
+            className={`rail-link${route.kind === 'graph' ? ' is-active' : ''}`}
+            href="#/graph"
+          >
+            <IconGraph size={15} />
+            Graph
           </a>
           <a
             className={`rail-link${route.kind === 'library' ? ' is-active' : ''}`}
