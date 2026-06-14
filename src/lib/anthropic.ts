@@ -4,6 +4,8 @@
 // settings at call time — it is never bundled, committed, or sent anywhere
 // but api.anthropic.com.
 
+import { toast } from './store'
+
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
 const MODEL = 'claude-sonnet-4-6'
 const SYSTEM =
@@ -28,28 +30,23 @@ export class AnthropicError extends Error {
   }
 }
 
-export async function askVault(input: AskVaultInput): Promise<string> {
-  const { prompt, apiKey, mcpUrl, mcpToken, mcpName } = input
-  if (!apiKey) throw new AnthropicError('No Anthropic API key set.')
-
+/**
+ * One Messages API round-trip. `extra` is merged into the request body — used
+ * to add the MCP connector (the `mcp_servers` declaration plus the `tools`
+ * entry that references it) on the vault-grounded attempt, and omitted on the
+ * plain fallback.
+ */
+async function requestMessages(
+  apiKey: string,
+  prompt: string,
+  extra: Record<string, unknown>,
+): Promise<string> {
   const body: Record<string, unknown> = {
     model: MODEL,
     max_tokens: 1000,
     system: SYSTEM,
     messages: [{ role: 'user', content: prompt }],
-  }
-  if (mcpUrl) {
-    body.mcp_servers = [
-      {
-        type: 'url',
-        url: mcpUrl,
-        name: mcpName || 'vault',
-        // TODO: MCP token scope — confirm with Aaron that the vault's REST
-        // access token authorizes the /mcp endpoint. If it does not, this call
-        // fails loudly (surfaced to the user via toast) rather than silently.
-        ...(mcpToken ? { authorization_token: mcpToken } : {}),
-      },
-    ]
+    ...extra,
   }
 
   let res: Response
@@ -98,6 +95,44 @@ export async function askVault(input: AskVaultInput): Promise<string> {
     .trim()
   if (!text) throw new AnthropicError('The model returned no text answer.')
   return text
+}
+
+export async function askVault(input: AskVaultInput): Promise<string> {
+  const { prompt, apiKey, mcpUrl, mcpToken, mcpName } = input
+  if (!apiKey) throw new AnthropicError('No Anthropic API key set.')
+
+  // Vault-grounded attempt: declare the MCP server AND reference it from the
+  // `tools` array. The connector requires both — a declared server with no
+  // matching tools entry is rejected with "MCP server '…' is defined but not
+  // referenced by any mcp_toolset in tools". The same server name is used in
+  // both places so they always match.
+  if (mcpUrl) {
+    const serverName = mcpName || 'vault'
+    try {
+      return await requestMessages(apiKey, prompt, {
+        mcp_servers: [
+          {
+            type: 'url',
+            url: mcpUrl,
+            name: serverName,
+            // TODO: MCP token scope — confirm with Aaron that the vault's REST
+            // access token authorizes the /mcp endpoint.
+            ...(mcpToken ? { authorization_token: mcpToken } : {}),
+          },
+        ],
+        tools: [{ type: 'mcp', server_name: serverName }],
+      })
+    } catch {
+      // Vault grounding failed for any reason (auth scope, MCP unreachable,
+      // connector shape) — retry without it so /ai always answers instead of
+      // failing hard. A genuine error from the plain call still propagates.
+      const answer = await requestMessages(apiKey, prompt, {})
+      toast('info', 'Answered without vault context.')
+      return answer
+    }
+  }
+
+  return requestMessages(apiKey, prompt, {})
 }
 
 /** Derive the MCP server config from a connected vault base URL. */
