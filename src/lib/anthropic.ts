@@ -9,8 +9,10 @@ import { toast } from './store'
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
 const MODEL = 'claude-sonnet-4-6'
 const SYSTEM =
-  'You are connected to a knowledge vault. Answer questions by querying the ' +
-  'vault first. Cite note titles when relevant.'
+  "You are Jonathan Gaietto's personal brand AI. You have access to his " +
+  "complete knowledge vault. You MUST search the vault before answering " +
+  "every question — never answer from general knowledge alone. Always cite " +
+  "the specific vault notes you drew from."
 
 export interface AskVaultInput {
   prompt: string
@@ -124,6 +126,11 @@ export async function askVault(input: AskVaultInput): Promise<string> {
           },
         ],
         tools: [{ type: 'mcp_toolset', mcp_server_name: serverName }],
+        // Force a vault tool call on every /ai query instead of leaving it to
+        // the model's discretion (tool_choice defaults to "auto"). This is only
+        // valid here — this attempt carries the toolset; the plain fallback
+        // below sends no tools and so must NOT set tool_choice.
+        tool_choice: { type: 'any' },
       })
     } catch (e) {
       // Vault grounding failed (e.g. MCP auth scope, server unreachable) —
