@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
 import { processOAuthReturn, useStore } from './lib/store'
 import { useUi, openPalette, closePalette } from './lib/ui'
 import { navigate, useRoute } from './lib/router'
@@ -12,6 +12,12 @@ import { NewScriptModal } from './views/NewScriptModal'
 import { CommandPalette } from './components/CommandPalette'
 import { ToastHost } from './components/Toast'
 import { SCRIPTS_DB } from './domain/scripts'
+
+// Pages pulls in the whole Tiptap/ProseMirror editor — keep it out of the
+// initial bundle so Scripts/Graph/Library stay light. It loads on first visit.
+const PagesView = lazy(() =>
+  import('./views/PagesView').then((m) => ({ default: m.PagesView })),
+)
 
 export default function App() {
   const { session, oauthStatus } = useStore()
@@ -74,6 +80,25 @@ export default function App() {
     return (
       <>
         <GraphView />
+        {ui.paletteOpen && <CommandPalette />}
+        <ToastHost />
+      </>
+    )
+  }
+
+  // Pages is full-bleed too — its own two-pane shell replaces the rail.
+  if (route.kind === 'pages') {
+    return (
+      <>
+        <Suspense
+          fallback={
+            <div className="pages-loading">
+              <div className="spinner" aria-hidden="true" />
+            </div>
+          }
+        >
+          <PagesView path={route.path} />
+        </Suspense>
         {ui.paletteOpen && <CommandPalette />}
         <ToastHost />
       </>

@@ -244,4 +244,17 @@ export class VaultApi {
     )
     return VaultApi.normalize(updated)
   }
+
+  /**
+   * Delete a note by id or path. Uses the same path-addressed route + encoding
+   * fallback as PATCH. The Parachute REST API answers 200 (with a
+   * `{ deleted, id }` body) or 204 — either is treated as success. A 404/405
+   * propagates as a VaultError so a missing route surfaces loudly to the caller
+   * instead of failing silently.
+   */
+  async deleteNote(idOrPath: string): Promise<void> {
+    await this.withNoteRoute(idOrPath, (enc) =>
+      this.request<unknown>('DELETE', `/notes/${enc}`),
+    )
+  }
 }

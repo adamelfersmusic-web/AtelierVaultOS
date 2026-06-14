@@ -159,3 +159,96 @@ export const IconDisconnect = (p: IconProps = {}) =>
     </>,
     p,
   )
+
+// ——— Pages editor ———
+
+export const IconPage = (p: IconProps = {}) =>
+  svg(
+    <>
+      <path d="M4 2.5h5.2L12.5 5.8V13a.6.6 0 0 1-.6.6H4a.6.6 0 0 1-.6-.6V3.1A.6.6 0 0 1 4 2.5Z" />
+      <path d="M9 2.7v3.2h3.3" />
+      <path d="M5.8 8.7h4.4M5.8 11h2.8" />
+    </>,
+    p,
+  )
+
+export const IconSettings = (p: IconProps = {}) =>
+  svg(
+    <>
+      <circle cx="8" cy="8" r="2" />
+      <path d="M8 1.8v1.7M8 12.5v1.7M14.2 8h-1.7M3.5 8H1.8M12.4 3.6l-1.2 1.2M4.8 11.2l-1.2 1.2M12.4 12.4l-1.2-1.2M4.8 4.8 3.6 3.6" />
+    </>,
+    p,
+  )
+
+export const IconMic = (p: IconProps = {}) =>
+  svg(
+    <>
+      <rect x="6" y="2" width="4" height="7" rx="2" />
+      <path d="M4 7.5a4 4 0 0 0 8 0M8 11.5V14M6 14h4" />
+    </>,
+    p,
+  )
+
+export const IconTrash = (p: IconProps = {}) =>
+  svg(
+    <>
+      <path d="M3.5 4.5h9" />
+      <path d="M6.4 4.5V3.3a.8.8 0 0 1 .8-.8h1.6a.8.8 0 0 1 .8.8v1.2" />
+      <path d="M5 4.5l.5 8.2a1 1 0 0 0 1 .9h3a1 1 0 0 0 1-.9l.5-8.2" />
+      <path d="M7 7v4M9 7v4" />
+    </>,
+    p,
+  )
+
+export const IconText = (p: IconProps = {}) =>
+  svg(<path d="M3.5 4h9M3.5 8h9M3.5 12h5.5" />, p)
+
+export const IconHeading = (p: IconProps = {}) =>
+  svg(<path d="M4 3v10M11 3v10M4 8h7" />, p)
+
+export const IconList = (p: IconProps = {}) =>
+  svg(
+    <>
+      <path d="M6 4.5h7M6 8h7M6 11.5h7" />
+      <circle cx="3.4" cy="4.5" r="0.95" fill="currentColor" stroke="none" />
+      <circle cx="3.4" cy="8" r="0.95" fill="currentColor" stroke="none" />
+      <circle cx="3.4" cy="11.5" r="0.95" fill="currentColor" stroke="none" />
+    </>,
+    p,
+  )
+
+export const IconListNumbered = (p: IconProps = {}) =>
+  svg(
+    <>
+      <path d="M6.5 4.5h6.5M6.5 8h6.5M6.5 11.5h6.5" />
+      <path d="M2.6 3l.9-.5v3M2.7 6h1.6" />
+      <path d="M2.5 9.6c.2-1 1.9-.85 1.9.15 0 .7-1.7 1.3-1.9 2.25h2" />
+    </>,
+    p,
+  )
+
+export const IconTodo = (p: IconProps = {}) =>
+  svg(
+    <>
+      <rect x="2.6" y="2.6" width="10.8" height="10.8" rx="2.4" />
+      <path d="M5.5 8.2l1.8 1.8 3.4-3.9" />
+    </>,
+    p,
+  )
+
+export const IconDivider = (p: IconProps = {}) =>
+  svg(<path d="M3.5 4.5h9M2.5 8h11M3.5 11.5h9" />, p)
+
+export const IconQuote = (p: IconProps = {}) =>
+  svg(<path d="M4 4.5v7M7.5 5.5h5.5M7.5 8h5.5M7.5 10.5h3.5" />, p)
+
+export const IconImage = (p: IconProps = {}) =>
+  svg(
+    <>
+      <rect x="2.5" y="3" width="11" height="10" rx="1.6" />
+      <circle cx="6" cy="6.3" r="1.1" />
+      <path d="M3 11.7l3-3 2.2 2.2L10.5 7l3 3.2" />
+    </>,
+    p,
+  )
