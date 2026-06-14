@@ -101,11 +101,14 @@ export async function askVault(input: AskVaultInput): Promise<string> {
   const { prompt, apiKey, mcpUrl, mcpToken, mcpName } = input
   if (!apiKey) throw new AnthropicError('No Anthropic API key set.')
 
-  // Vault-grounded attempt: declare the MCP server AND reference it from the
-  // `tools` array. The connector requires both — a declared server with no
-  // matching tools entry is rejected with "MCP server '…' is defined but not
-  // referenced by any mcp_toolset in tools". The same server name is used in
-  // both places so they always match.
+  // Vault-grounded attempt: declare the MCP server in `mcp_servers` AND
+  // reference it with an `mcp_toolset` entry in `tools`. The connector
+  // (mcp-client-2025-11-20) requires both, and the toolset link field is
+  // `mcp_server_name` with type `mcp_toolset` — a declared server with no
+  // matching toolset is rejected ("MCP server '…' is defined but not
+  // referenced by any mcp_toolset in tools"). The same server name is used in
+  // both places so they always match. Anthropic's servers make the MCP
+  // connection; `authorization_token` is the vault's OAuth access token.
   if (mcpUrl) {
     const serverName = mcpName || 'vault'
     try {
@@ -120,12 +123,14 @@ export async function askVault(input: AskVaultInput): Promise<string> {
             ...(mcpToken ? { authorization_token: mcpToken } : {}),
           },
         ],
-        tools: [{ type: 'mcp', server_name: serverName }],
+        tools: [{ type: 'mcp_toolset', mcp_server_name: serverName }],
       })
-    } catch {
-      // Vault grounding failed for any reason (auth scope, MCP unreachable,
-      // connector shape) — retry without it so /ai always answers instead of
-      // failing hard. A genuine error from the plain call still propagates.
+    } catch (e) {
+      // Vault grounding failed (e.g. MCP auth scope, server unreachable) —
+      // retry without it so /ai always answers instead of failing hard. A
+      // genuine error from the plain call still propagates. The console line
+      // makes a persistent MCP failure visible in devtools.
+      console.warn('[ai] vault MCP grounding failed; answering without it:', e)
       const answer = await requestMessages(apiKey, prompt, {})
       toast('info', 'Answered without vault context.')
       return answer
