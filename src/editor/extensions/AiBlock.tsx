@@ -1,6 +1,6 @@
 // The /ai block — an interactive, async NodeView. Slash `/ai` inserts it; the
-// user types a question; on submit it queries Anthropic (MCP-connected to the
-// live vault) and inserts the answer as NEW markdown blocks directly below,
+// user types a question; on submit it queries Anthropic (grounded with vault
+// notes via client-side RAG) and inserts the answer as NEW markdown blocks below,
 // then collapses itself into a small "asked: …" record. It never persists as
 // an exotic node: its markdown form is a plain blockquote of the question, and
 // the answer is ordinary paragraphs/quotes.
@@ -10,8 +10,8 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import type { NodeViewProps } from '@tiptap/core'
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react'
 import { useEditorSettings, openPagesSettings } from '../../lib/editorSettings'
-import { askVault, mcpFromVaultBase, AnthropicError } from '../../lib/anthropic'
-import { toast, vaultAccessToken, vaultBaseUrl } from '../../lib/store'
+import { askVault, AnthropicError } from '../../lib/anthropic'
+import { toast } from '../../lib/store'
 import { IconSpark, IconClose } from '../../components/Icons'
 
 function AiBlockView({ node, updateAttributes, deleteNode, editor, getPos }: NodeViewProps) {
@@ -39,14 +39,9 @@ function AiBlockView({ node, updateAttributes, deleteNode, editor, getPos }: Nod
     setPhase('loading')
     setError(null)
     try {
-      const mcp = mcpFromVaultBase(vaultBaseUrl())
-      const token = await vaultAccessToken()
       const answer = await askVault({
         prompt: q,
         apiKey: settings.anthropicKey,
-        mcpUrl: mcp?.url ?? null,
-        mcpName: mcp?.name,
-        mcpToken: token,
       })
       // Insert the answer as its own real blocks, directly below this node.
       const pos = getPos()

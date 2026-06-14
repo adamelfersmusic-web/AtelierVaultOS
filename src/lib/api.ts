@@ -180,6 +180,18 @@ export class VaultApi {
     )
   }
 
+  /** Full-text search WITH note bodies — the retrieval step for /ai RAG. */
+  async searchWithContent(query: string, limit = 50): Promise<Note[]> {
+    const p = new URLSearchParams({
+      search: query,
+      limit: String(limit),
+      include_content: 'true',
+    })
+    return (await this.request<Note[]>('GET', `/notes?${p.toString()}`)).map(
+      VaultApi.normalize,
+    )
+  }
+
   /** Most recently created notes, vault-wide (lean shape). */
   async listRecent(limit = 60): Promise<Note[]> {
     const p = new URLSearchParams({

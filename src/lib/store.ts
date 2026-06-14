@@ -404,6 +404,22 @@ export async function searchVault(query: string): Promise<Note[]> {
   }
 }
 
+/** Search the vault WITH note bodies — the retrieval step for the /ai block's
+ * client-side RAG grounding. Reuses the active authenticated session. */
+export async function searchVaultContext(
+  query: string,
+  limit = 50,
+): Promise<Note[]> {
+  try {
+    const results = await requireApi().searchWithContent(query, limit)
+    mergeNotes(results)
+    return results
+  } catch (e) {
+    handleAuthFailure(e)
+    throw e
+  }
+}
+
 export async function recentNotes(): Promise<Note[]> {
   try {
     const results = await requireApi().listRecent()
