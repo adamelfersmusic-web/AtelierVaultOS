@@ -7,12 +7,53 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Node, mergeAttributes } from '@tiptap/core'
-import type { NodeViewProps } from '@tiptap/core'
+import type { JSONContent, NodeViewProps } from '@tiptap/core'
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react'
 import { useEditorSettings, openPagesSettings } from '../../lib/editorSettings'
 import { askVault, AnthropicError } from '../../lib/anthropic'
 import { toast } from '../../lib/store'
 import { IconSpark, IconClose } from '../../components/Icons'
+
+// Flatten parsed markdown to plain-text paragraph blocks. Claude's answers can
+// combine marks (e.g. code+italic) or use blocks the editor schema rejects on
+// insert ("Invalid collection of marks for node text: code,italic"). Reducing
+// to bare paragraphs always inserts cleanly — the content is preserved; only
+// inline styling and exotic block types are dropped.
+function plainTextBlocks(doc: JSONContent | undefined, fallback: string): JSONContent[] {
+  const textOf = (n: JSONContent): string =>
+    n.type === 'text' ? (n.text ?? '') : (n.content ?? []).map(textOf).join('')
+
+  const lines: string[] = []
+  const walk = (n: JSONContent): void => {
+    switch (n.type) {
+      case 'bulletList':
+      case 'orderedList':
+        for (const item of n.content ?? []) {
+          const t = textOf(item).trim()
+          if (t) lines.push(`• ${t}`)
+        }
+        return
+      case 'paragraph':
+      case 'heading':
+      case 'blockquote':
+      case 'codeBlock': {
+        const t = textOf(n).trim()
+        if (t) lines.push(t)
+        return
+      }
+      default:
+        // Tables, dividers, images, etc.: recurse so any text inside survives.
+        for (const child of n.content ?? []) walk(child)
+    }
+  }
+
+  for (const n of doc?.content ?? []) walk(n)
+  const blocks = lines.length ? lines : [fallback.trim()]
+  return blocks.map((text) => ({
+    type: 'paragraph',
+    content: text ? [{ type: 'text', text }] : [],
+  }))
+}
 
 function AiBlockView({ node, updateAttributes, deleteNode, editor, getPos }: NodeViewProps) {
   const settings = useEditorSettings()
@@ -43,16 +84,22 @@ function AiBlockView({ node, updateAttributes, deleteNode, editor, getPos }: Nod
         prompt: q,
         apiKey: settings.anthropicKey,
       })
-      // Insert the answer as its own real blocks, directly below this node.
+      // Insert the answer as plain-text blocks. Claude's markdown can contain
+      // mark combos (e.g. code+italic) or blocks the editor can't render, which
+      // throw "Invalid collection of marks…" on insert; flattening to plain
+      // paragraphs always inserts cleanly.
+      let parsed: JSONContent | undefined
+      try {
+        parsed = editor.markdown?.parse(answer)
+      } catch {
+        parsed = undefined
+      }
+      const blocks = plainTextBlocks(parsed, answer)
       const pos = getPos()
       if (typeof pos === 'number') {
-        editor
-          .chain()
-          .focus()
-          .insertContentAt(pos + node.nodeSize, answer, { contentType: 'markdown' })
-          .run()
+        editor.chain().focus().insertContentAt(pos + node.nodeSize, blocks).run()
       } else {
-        editor.chain().focus().insertContent(answer, { contentType: 'markdown' }).run()
+        editor.chain().focus().insertContent(blocks).run()
       }
       // Collapse to a small "asked" record.
       updateAttributes({ prompt: q, asked: true })
