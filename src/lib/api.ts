@@ -192,6 +192,26 @@ export class VaultApi {
     )
   }
 
+  /**
+   * Most-linked notes WITH content — the vault's hubs, used as baseline context
+   * for /ai RAG so even a vague query has real grounding. Ordered by link
+   * degree server-side, then re-sorted defensively in case the deployment
+   * ignores `order_by`.
+   */
+  async mostLinkedWithContent(limit = 20): Promise<Note[]> {
+    const p = new URLSearchParams({
+      include_content: 'true',
+      include_link_count: 'true',
+      order_by: 'link_count',
+      sort: 'desc',
+      limit: String(limit),
+    })
+    const notes = (
+      await this.request<Note[]>('GET', `/notes?${p.toString()}`)
+    ).map(VaultApi.normalize)
+    return notes.sort((a, b) => (b.linkCount ?? 0) - (a.linkCount ?? 0))
+  }
+
   /** Most recently created notes, vault-wide (lean shape). */
   async listRecent(limit = 60): Promise<Note[]> {
     const p = new URLSearchParams({

@@ -556,6 +556,45 @@
   gap: 8px;
 }
 
+/* thinking monogram — a breathing gold "G." while /ai is processing */
+.ai-thinking {
+  display: flex;
+  justify-content: center;
+  padding: 18px 0 8px;
+}
+.ai-monogram {
+  font-family: var(--font-display);
+  font-size: 48px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--gold);
+  animation: ai-breathe 2.5s ease-in-out infinite;
+  will-change: opacity, text-shadow;
+}
+.ai-monogram.is-leaving {
+  animation: none;
+  opacity: 0;
+  text-shadow: none;
+  transition: opacity 0.3s ease;
+}
+@keyframes ai-breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+    text-shadow: 0 0 10px color-mix(in srgb, var(--gold) 22%, transparent);
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 24px color-mix(in srgb, var(--gold) 55%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-monogram {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
 .ai-block-asked {
   margin: 0.35em 0;
 }

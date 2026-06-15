@@ -5,7 +5,7 @@
 // No SDK and no MCP round-trip — a single fetch to api.anthropic.com with the
 // user's own key, read from client-side settings at call time.
 
-import { searchVaultContext, toast } from './store'
+import { mostLinkedContext, searchVaultContext, toast } from './store'
 import { titleFromPath } from './format'
 import type { Note } from './types'
 
@@ -19,9 +19,10 @@ const SYSTEM =
   'from general knowledge alone. Always cite the specific vault notes you drew ' +
   "from. If the notes don't contain the answer, say so plainly rather than guessing."
 
-// Retrieval tuning: search wide, inject the best few with bounded bodies.
-const SEARCH_LIMIT = 50
-const TOP_N = 15
+// Retrieval tuning: a baseline of the most-linked hubs plus keyword matches.
+const BASELINE_N = 20 // most-linked notes fetched on every query
+const SEARCH_LIMIT = 50 // keyword search breadth
+const TOP_N = 15 // max keyword matches added on top of the baseline
 const MAX_BODY_CHARS = 1800
 
 export interface AskVaultInput {
@@ -135,21 +136,31 @@ export async function askVault(input: AskVaultInput): Promise<string> {
   const { prompt, apiKey } = input
   if (!apiKey) throw new AnthropicError('No Anthropic API key set.')
 
-  // Client-side RAG (primary, guaranteed grounding): retrieve relevant notes
-  // from the vault's REST API — already authenticated by the active session,
-  // the same API that powers Scripts and Graph — and inject them into the
-  // system prompt. We do NOT use the MCP connector: it was failing silently,
-  // and this reuses a proven, authenticated path that always reaches the vault.
-  let system = SYSTEM
-  try {
-    const hits = await searchVaultContext(keywords(prompt), SEARCH_LIMIT)
-    system = `${SYSTEM}\n\n# Vault context\n\n${contextBlock(hits.slice(0, TOP_N))}`
-  } catch (e) {
-    // The vault search itself failed (network/auth) — answer without context
-    // rather than failing hard. Visible in devtools for diagnosis.
-    console.warn('[ai] vault retrieval failed; answering without context:', e)
+  // Client-side RAG. Two retrievals run together, both over the active
+  // authenticated session (the API that powers Scripts and Graph):
+  //   • BASELINE — the most-linked notes (the vault's hubs). Always fetched, so
+  //     even a vague query whose keywords match nothing still has real context.
+  //   • KEYWORD — notes matching the question's keywords, layered on top.
+  const [baseRes, kwRes] = await Promise.allSettled([
+    mostLinkedContext(BASELINE_N),
+    searchVaultContext(keywords(prompt), SEARCH_LIMIT),
+  ])
+  const baseline = baseRes.status === 'fulfilled' ? baseRes.value : []
+  const matches = kwRes.status === 'fulfilled' ? kwRes.value : []
+
+  // Keyword matches first (most query-relevant), then the baseline hubs;
+  // dedupe by path and cap the keyword additions.
+  const seen = new Set(baseline.map((n) => n.path))
+  const extra = matches.filter((n) => !seen.has(n.path)).slice(0, TOP_N)
+  const notes = [...extra, ...baseline]
+
+  if (baseRes.status === 'rejected') {
+    console.warn('[ai] baseline (most-linked) retrieval failed:', baseRes.reason)
+  }
+  if (baseRes.status === 'rejected' && kwRes.status === 'rejected') {
     toast('info', 'Answered without vault context.')
   }
 
+  const system = `${SYSTEM}\n\n# Vault context\n\n${contextBlock(notes)}`
   return requestMessages(apiKey, system, prompt)
 }

@@ -59,7 +59,9 @@ function AiBlockView({ node, updateAttributes, deleteNode, editor, getPos }: Nod
   const settings = useEditorSettings()
   const asked = !!node.attrs.asked
   const [prompt, setPrompt] = useState<string>((node.attrs.prompt as string) || '')
-  const [phase, setPhase] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'loading' | 'fading' | 'error'>(
+    'idle',
+  )
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -84,6 +86,9 @@ function AiBlockView({ node, updateAttributes, deleteNode, editor, getPos }: Nod
         prompt: q,
         apiKey: settings.anthropicKey,
       })
+      // Fade the thinking monogram out (0.3s) before the answer appears.
+      setPhase('fading')
+      await new Promise((resolve) => setTimeout(resolve, 300))
       // Insert the answer as plain-text blocks. Claude's markdown can contain
       // mark combos (e.g. code+italic) or blocks the editor can't render, which
       // throw "Invalid collection of marks…" on insert; flattening to plain
@@ -139,7 +144,7 @@ function AiBlockView({ node, updateAttributes, deleteNode, editor, getPos }: Nod
           className="ai-input"
           placeholder="Ask a question — answered from your notes…"
           value={prompt}
-          disabled={phase === 'loading'}
+          disabled={phase === 'loading' || phase === 'fading'}
           rows={2}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => {
@@ -153,24 +158,28 @@ function AiBlockView({ node, updateAttributes, deleteNode, editor, getPos }: Nod
           }}
         />
         {error && <div className="ai-error">{error}</div>}
-        <div className="ai-actions">
-          <button className="btn btn-ghost" onClick={() => deleteNode()}>
-            Cancel
-          </button>
-          <button
-            className="btn btn-gold"
-            disabled={!prompt.trim() || phase === 'loading'}
-            onClick={() => void submit()}
-          >
-            {phase === 'loading' ? (
-              'Thinking…'
-            ) : (
-              <>
-                Ask <kbd>⌘↵</kbd>
-              </>
-            )}
-          </button>
-        </div>
+        {phase === 'loading' || phase === 'fading' ? (
+          <div className="ai-thinking" role="status" aria-label="Thinking">
+            <span
+              className={`ai-monogram${phase === 'fading' ? ' is-leaving' : ''}`}
+            >
+              G.
+            </span>
+          </div>
+        ) : (
+          <div className="ai-actions">
+            <button className="btn btn-ghost" onClick={() => deleteNode()}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-gold"
+              disabled={!prompt.trim()}
+              onClick={() => void submit()}
+            >
+              Ask <kbd>⌘↵</kbd>
+            </button>
+          </div>
+        )}
       </div>
     </NodeViewWrapper>
   )

@@ -420,6 +420,19 @@ export async function searchVaultContext(
   }
 }
 
+/** Most-linked notes WITH bodies — baseline context for the /ai block, so a
+ * vague query still has the vault's hub notes to ground against. */
+export async function mostLinkedContext(limit = 20): Promise<Note[]> {
+  try {
+    const results = await requireApi().mostLinkedWithContent(limit)
+    mergeNotes(results)
+    return results
+  } catch (e) {
+    handleAuthFailure(e)
+    throw e
+  }
+}
+
 export async function recentNotes(): Promise<Note[]> {
   try {
     const results = await requireApi().listRecent()
