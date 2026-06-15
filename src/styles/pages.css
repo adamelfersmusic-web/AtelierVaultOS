@@ -307,7 +307,10 @@
   font-size: 17.5px;
 }
 .page-prose p {
-  margin: 0;
+  /* Explicit bottom margin (this selector outranks `> * + *`, which is why
+     spacing was collapsing) — clear, double-spaced breathing room between
+     paragraphs. List/task paragraphs are reset to 0 below. */
+  margin: 0 0 1.4em;
 }
 .page-prose strong {
   color: var(--ink);
@@ -341,7 +344,7 @@
 .page-prose li {
   margin: 0.15em 0;
 }
-.page-prose li > p {
+.page-prose li p {
   margin: 0;
 }
 .page-prose code {
