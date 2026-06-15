@@ -14,41 +14,21 @@ import { askVault, AnthropicError } from '../../lib/anthropic'
 import { toast } from '../../lib/store'
 import { IconSpark, IconClose } from '../../components/Icons'
 
-// Flatten parsed markdown to plain-text paragraph blocks. Claude's answers can
-// combine marks (e.g. code+italic) or use blocks the editor schema rejects on
-// insert ("Invalid collection of marks for node text: code,italic"). Reducing
-// to bare paragraphs always inserts cleanly — the content is preserved; only
-// inline styling and exotic block types are dropped.
-function plainTextBlocks(doc: JSONContent | undefined, fallback: string): JSONContent[] {
-  const textOf = (n: JSONContent): string =>
-    n.type === 'text' ? (n.text ?? '') : (n.content ?? []).map(textOf).join('')
-
-  const lines: string[] = []
-  const walk = (n: JSONContent): void => {
-    switch (n.type) {
-      case 'bulletList':
-      case 'orderedList':
-        for (const item of n.content ?? []) {
-          const t = textOf(item).trim()
-          if (t) lines.push(`• ${t}`)
-        }
-        return
-      case 'paragraph':
-      case 'heading':
-      case 'blockquote':
-      case 'codeBlock': {
-        const t = textOf(n).trim()
-        if (t) lines.push(t)
-        return
-      }
-      default:
-        // Tables, dividers, images, etc.: recurse so any text inside survives.
-        for (const child of n.content ?? []) walk(child)
-    }
-  }
-
-  for (const n of doc?.content ?? []) walk(n)
-  const blocks = lines.length ? lines : [fallback.trim()]
+// Split the model's plain-prose answer into separate paragraph block nodes —
+// one block per logical paragraph, so ideas aren't collapsed into a single
+// run. The system prompt asks Claude for plain prose, so we split on blank
+// lines (true paragraph breaks); a response with no blank lines falls back to
+// single newlines. Plain-text nodes carry no marks, so they can never hit the
+// schema's "invalid collection of marks" errors.
+function toParagraphBlocks(answer: string): JSONContent[] {
+  const trimmed = answer.replace(/\r\n?/g, '\n').trim()
+  let parts = trimmed.split(/\n[ \t]*\n+/)
+  if (parts.length === 1) parts = trimmed.split(/\n+/)
+  const paragraphs = parts
+    // Join soft-wrapped lines within a paragraph into one run.
+    .map((p) => p.replace(/[ \t]*\n[ \t]*/g, ' ').trim())
+    .filter((p) => p.length > 0)
+  const blocks = paragraphs.length ? paragraphs : [trimmed]
   return blocks.map((text) => ({
     type: 'paragraph',
     content: text ? [{ type: 'text', text }] : [],
@@ -89,17 +69,10 @@ function AiBlockView({ node, updateAttributes, deleteNode, editor, getPos }: Nod
       // Fade the thinking monogram out (0.3s) before the answer appears.
       setPhase('fading')
       await new Promise((resolve) => setTimeout(resolve, 300))
-      // Insert the answer as plain-text blocks. Claude's markdown can contain
-      // mark combos (e.g. code+italic) or blocks the editor can't render, which
-      // throw "Invalid collection of marks…" on insert; flattening to plain
-      // paragraphs always inserts cleanly.
-      let parsed: JSONContent | undefined
-      try {
-        parsed = editor.markdown?.parse(answer)
-      } catch {
-        parsed = undefined
-      }
-      const blocks = plainTextBlocks(parsed, answer)
+      // Insert the answer as separate plain-text paragraph blocks — one block
+      // per logical paragraph, with spacing between them. Plain-text nodes carry
+      // no marks, so they can't hit the schema's invalid-mark errors.
+      const blocks = toParagraphBlocks(answer)
       const pos = getPos()
       if (typeof pos === 'number') {
         editor.chain().focus().insertContentAt(pos + node.nodeSize, blocks).run()
