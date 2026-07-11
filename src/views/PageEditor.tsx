@@ -29,7 +29,11 @@ import { getSettings } from '../lib/editorSettings'
 import { transcribe } from '../lib/scribe'
 import { Modal } from '../components/Modal'
 import { IconMic, IconPage, IconPlus, IconTrash } from '../components/Icons'
-import { SubPageLink, convertPageLinks } from '../editor/extensions/SubPageLink'
+import {
+  SubPageLink,
+  convertPageLinks,
+  convertWikiLinks,
+} from '../editor/extensions/SubPageLink'
 import { AiBlock } from '../editor/extensions/AiBlock'
 import { SlashCommand } from '../editor/extensions/SlashCommand'
 
@@ -124,8 +128,10 @@ export function PageEditor({ path }: { path: string }) {
 
     const apply = (content: string, updatedAt: string) => {
       editor.commands.setContent(content, { contentType: 'markdown' })
-      const { doc, changed } = convertPageLinks(editor.getJSON())
-      if (changed) editor.commands.setContent(doc)
+      // Legacy `pages/` markdown links AND real `[[wikilinks]]` both become chips.
+      const legacy = convertPageLinks(editor.getJSON())
+      const wiki = convertWikiLinks(legacy.doc)
+      if (legacy.changed || wiki.changed) editor.commands.setContent(wiki.doc)
       baseRef.current = { content: editor.getMarkdown(), updatedAt }
       loadingRef.current = false
       setStatus('ready')
