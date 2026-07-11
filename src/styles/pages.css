@@ -934,3 +934,13 @@
   color: var(--text-dim, #888);
   font-size: 0.85rem;
 }
+
+/* Read-view vault images (renderMarkdown data-vault-src, resolved by
+   useVaultImages). */
+.vault-img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+  margin: 0.6rem 0;
+}

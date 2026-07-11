@@ -12,6 +12,7 @@ import {
 import { setRouteGuard } from '../lib/router'
 import { fullTime, relativeTime, titleFromPath } from '../lib/format'
 import { renderMarkdown } from '../lib/markdown'
+import { useVaultImages } from '../lib/useVaultImages'
 import {
   FIELDS,
   isProtectedNote,
@@ -41,8 +42,12 @@ export function NotePage({ path }: { path: string }) {
   const [confirmCanon, setConfirmCanon] = useState(false)
   const [savingBody, setSavingBody] = useState(false)
   const textRef = useRef<HTMLTextAreaElement>(null)
+  const bodyRef = useRef<HTMLElement>(null)
 
   const dirty = editing && draft !== (baseRef.current?.content ?? '')
+
+  // Resolve vault image attachments in the rendered body (read mode only).
+  useVaultImages(bodyRef, editing ? null : note?.content)
 
   useEffect(() => {
     let cancelled = false
@@ -322,6 +327,7 @@ export function NotePage({ path }: { path: string }) {
             Edit
           </button>
           <article
+            ref={bodyRef}
             className="prose"
             data-testid="note-body"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content ?? '') }}

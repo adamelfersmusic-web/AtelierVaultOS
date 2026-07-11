@@ -20,11 +20,24 @@ function linkifyWikilinks(src: string): string {
   })
 }
 
+// Root-relative vault images (`/api/storage/...`) can't display from an <img>
+// src — the browser resolves them against the app origin, not the vault, so
+// they 404. Stage them as `data-vault-src` placeholders (no src → no broken
+// flash); useVaultImages swaps in an auth-resolved URL after render. External
+// http(s)/data images are left untouched.
+function stageVaultImages(src: string): string {
+  return src.replace(
+    /!\[([^\]]*)\]\((\/[^)\s]+)\)/g,
+    (_m, alt: string, path: string) =>
+      `<img alt="${alt.replace(/"/g, '&quot;')}" data-vault-src="${path}" class="vault-img" />`,
+  )
+}
+
 export function renderMarkdown(src: string): string {
-  const html = marked.parse(linkifyWikilinks(src)) as string
+  const html = marked.parse(stageVaultImages(linkifyWikilinks(src))) as string
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     FORBID_TAGS: ['style'],
-    ADD_ATTR: ['target'],
+    ADD_ATTR: ['target', 'data-vault-src'],
   })
 }
