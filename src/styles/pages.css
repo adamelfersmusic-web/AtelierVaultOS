@@ -911,3 +911,26 @@
   display: flex;
   justify-content: flex-end;
 }
+
+/* Vault image attachments (VaultImage node view). Resolved from /api/storage
+   against the vault; shown as a blob URL when storage is auth-gated. */
+.vault-image-wrap {
+  display: block;
+  margin: 0.6rem 0;
+}
+.vault-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+}
+.vault-image-fallback {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px dashed var(--border, #333);
+  border-radius: 8px;
+  color: var(--text-dim, #888);
+  font-size: 0.85rem;
+}

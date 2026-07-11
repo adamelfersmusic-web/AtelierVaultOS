@@ -224,6 +224,35 @@ export class VaultApi {
     )
   }
 
+  /**
+   * Vault storage assets (images) are stored in note bodies as root-relative
+   * paths like `/api/storage/<date>/<file>`. In an `<img src>` the browser
+   * resolves those against the APP's origin, not the vault — so they 404. These
+   * two helpers resolve them against the vault instead.
+   */
+
+  /** Absolute URL for a `/api/...` asset path (works when storage is public). */
+  assetUrl(relPath: string): string {
+    const rel = relPath.startsWith('/') ? relPath : `/${relPath}`
+    return `${this.baseUrl}${rel}`
+  }
+
+  /**
+   * Fetch a storage asset WITH the bearer token and hand back an object URL.
+   * An `<img>` tag can't send an Authorization header, so when storage is
+   * gated this is the only way to display it. Callers own the object URL and
+   * must revoke it when done.
+   */
+  async fetchAssetObjectUrl(relPath: string): Promise<string> {
+    const rel = relPath.startsWith('/') ? relPath : `/${relPath}`
+    const token = await this.auth.getAccessToken()
+    const res = await fetch(`${this.baseUrl}${rel}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) throw new VaultError(res.status, `asset ${rel} → ${res.status}`)
+    return URL.createObjectURL(await res.blob())
+  }
+
   async listTags(): Promise<TagInfo[]> {
     return this.request<TagInfo[]>('GET', '/tags')
   }

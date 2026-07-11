@@ -433,6 +433,16 @@ export async function mostLinkedContext(limit = 20): Promise<Note[]> {
   }
 }
 
+/** Absolute URL for a vault storage asset (image) path like `/api/storage/...`. */
+export function vaultAssetUrl(relPath: string): string {
+  return requireApi().assetUrl(relPath)
+}
+
+/** Auth-safe object URL for a vault storage asset. Caller must revoke it. */
+export function fetchVaultAsset(relPath: string): Promise<string> {
+  return requireApi().fetchAssetObjectUrl(relPath)
+}
+
 export async function recentNotes(): Promise<Note[]> {
   try {
     const results = await requireApi().listRecent()
