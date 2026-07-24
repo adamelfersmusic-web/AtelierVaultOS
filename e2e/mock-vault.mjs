@@ -397,7 +397,7 @@ const server = http.createServer(async (req, res) => {
       const note = {
         id: `2026-06-12-00-00-00-${idSeq++}`,
         path: p,
-        extension: 'md',
+        extension: body.extension ?? 'md',
         content: body.content ?? '',
         tags: body.tags ?? [],
         metadata: body.metadata ?? {},
