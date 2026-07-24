@@ -9,6 +9,15 @@ const MOCK = 'http://127.0.0.1:8787'
 const TOKEN = 'atelier-test-token'
 const AUTH = { Authorization: `Bearer ${TOKEN}` }
 const NOTE_PATH = 'Atelier/Method/ai-primer/_module-0-interactive'
+const GLOSSARY_PATH = 'Atelier/Method/ai-primer/ai-primer-glossary'
+
+// A trimmed copy of the real glossary note — <Term> fetches this over REST.
+const GLOSSARY = `# AI Primer — Glossary
+
+- **Context window** — the model's working memory for the current conversation → [[ai-primer-01-core-terminology]]
+- **RAG (Retrieval-Augmented Generation)** — retrieving relevant documents before answering → [[ai-primer-01-core-terminology]]
+- **Hallucination** — confident fabricated output presented as fact; structural, not a bug → [[ai-primer-01-core-terminology]]
+`
 
 const MDX = `## Module 0 — The Mental Model (interactive)
 
@@ -19,7 +28,8 @@ is the same **eight layers** stacked on each other. Click any layer to open it.
 
 The single highest-leverage habit in the whole primer: when a confusing new
 buzzword shows up, ask **which layer is this?** A <Term id="context-window">context window</Term>
-is layer two — short-term memory for one conversation. Drill it:
+is layer two. And when a term like <Term id="rag">RAG</Term> shows up, its
+definition is pulled live from your glossary note. Drill it:
 
 <LayerQuiz term="MCP" answer="Tools" />
 
@@ -42,11 +52,17 @@ If those three are solid, you're ready for Module 1.
 
 async function seed(page: Page) {
   await page.request.post(`${MOCK}/__test/reset`)
-  const res = await page.request.post(`${MOCK}/api/notes`, {
-    headers: AUTH,
-    data: { path: NOTE_PATH, extension: 'mdx', content: MDX, tags: [], metadata: {} },
-  })
-  expect(res.status(), await res.text()).toBe(201)
+  // The glossary note <Term> fetches from, plus the interactive module note.
+  for (const [path, content] of [
+    [GLOSSARY_PATH, GLOSSARY],
+    [NOTE_PATH, MDX],
+  ] as const) {
+    const res = await page.request.post(`${MOCK}/api/notes`, {
+      headers: AUTH,
+      data: { path, extension: path === NOTE_PATH ? 'mdx' : 'md', content, tags: [], metadata: {} },
+    })
+    expect(res.status(), await res.text()).toBe(201)
+  }
 }
 
 async function connect(page: Page) {
@@ -73,6 +89,12 @@ test('showcase: interactive Module 0 renders every course component', async ({ p
   // The checklist rendered its three items.
   await expect(body.locator('.mdx-checklist input[type=checkbox]')).toHaveCount(3)
   await page.screenshot({ path: 'e2e/.shots/showcase-01-fresh.png', fullPage: true })
+
+  // <Term id="rag"> pulls its definition LIVE from the seeded glossary note.
+  await body.getByRole('button', { name: 'RAG', exact: true }).click()
+  const ragDef = body.locator('.mdx-term-def')
+  await expect(ragDef).toContainText('retrieving relevant documents before answering')
+  await expect(ragDef.locator('.mdx-term-src')).toContainText('from your glossary')
 
   // Open a layer in the stack.
   await body.locator('.mdx-stack').first().getByRole('button', { name: /Context window/ }).click()

@@ -1201,6 +1201,11 @@ body.is-dragging .card {
   font-size: 14px;
   line-height: 1.6;
 }
+.mdx-term-src {
+  color: var(--ink-3);
+  font-style: italic;
+  font-size: 12px;
+}
 .mdx-loading {
   min-height: 1.5em;
 }

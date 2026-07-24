@@ -1,32 +1,54 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { resolveDefinition } from './glossary'
 
 // A glossary term inside prose: dotted underline, click to expand a
-// definition panel beneath the sentence. This is the one component wired
-// end to end for the MDX runtime-rendering test.
+// definition panel beneath the sentence.
 //
-// Definitions live in a small local map for now — enough to prove the
-// render + expand path against the ai-primer test note. Swapping this for a
-// real source (a vault `definitions/` lookup, a prop, an API) is a one-line
-// change to `defineTerm` and does not touch the render.
-const DEFINITIONS: Record<string, string> = {
+// Definitions are pulled LIVE from the vault's ai-primer-glossary note over
+// REST (see ./glossary). A tiny local map is kept only as an offline
+// fallback so the component still works if the glossary can't be reached.
+const FALLBACK: Record<string, string> = {
   'context-window':
-    'The span of text a model can consider at once — the prompt plus its own output so far. When it fills, the oldest tokens fall out of view. Layer two of the primer.',
+    'The span of text a model can consider at once — the prompt plus its own output so far. Layer two of the primer.',
 }
 
-function defineTerm(id: string): string | null {
-  return DEFINITIONS[id] ?? null
-}
+type State =
+  | { phase: 'idle' }
+  | { phase: 'loading' }
+  | { phase: 'done'; text: string; source: 'vault' | 'local' | 'missing' }
 
-export function Term({
-  id,
-  children,
-}: {
-  id?: string
-  children?: ReactNode
-}) {
+export function Term({ id, children }: { id?: string; children?: ReactNode }) {
   const [open, setOpen] = useState(false)
-  const definition = id ? defineTerm(id) : null
+  const [state, setState] = useState<State>({ phase: 'idle' })
   const panelId = id ? `term-def-${id}` : undefined
+
+  // Resolve the definition the first time the term is opened. Depends only on
+  // open/id — putting phase here would let the loading transition cancel its
+  // own in-flight fetch.
+  useEffect(() => {
+    if (!open) return
+    if (!id) {
+      setState({ phase: 'done', text: '', source: 'missing' })
+      return
+    }
+    let cancelled = false
+    setState((prev) => (prev.phase === 'done' ? prev : { phase: 'loading' }))
+    const fallback = (): State =>
+      FALLBACK[id]
+        ? { phase: 'done', text: FALLBACK[id], source: 'local' }
+        : { phase: 'done', text: '', source: 'missing' }
+    resolveDefinition(id)
+      .then((vaultDef) => {
+        if (cancelled) return
+        setState(vaultDef ? { phase: 'done', text: vaultDef, source: 'vault' } : fallback())
+      })
+      .catch(() => {
+        if (!cancelled) setState(fallback())
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, id])
 
   return (
     <span className="mdx-term-wrap">
@@ -41,8 +63,17 @@ export function Term({
       </button>
       {open && (
         <span id={panelId} className="mdx-term-def" role="note">
-          {definition ?? (
-            <em>No definition registered{id ? ` for “${id}”` : ''}.</em>
+          {state.phase === 'loading' && <em>Looking it up…</em>}
+          {state.phase === 'done' && state.source === 'missing' && (
+            <em>No definition in the glossary{id ? ` for “${id}”` : ''}.</em>
+          )}
+          {state.phase === 'done' && state.source !== 'missing' && (
+            <>
+              {state.text}
+              {state.source === 'vault' && (
+                <span className="mdx-term-src"> — from your glossary</span>
+              )}
+            </>
           )}
         </span>
       )}
