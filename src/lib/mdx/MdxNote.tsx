@@ -13,6 +13,7 @@ import { Term } from './Term'
 import { Checklist } from './Checklist'
 import { LayerStack } from './LayerStack'
 import { LayerQuiz } from './LayerQuiz'
+import { AskThePrimer } from './AskThePrimer'
 
 // Runtime MDX rendering. The MDX comes from a REST fetch at page load, not
 // from files in the repo, so it is compiled in the browser here — no
@@ -32,6 +33,7 @@ const COMPONENTS: MDXComponents = {
   Checklist,
   LayerStack,
   LayerQuiz,
+  AskThePrimer,
 }
 
 type Compiled = ComponentType<{ components?: MDXComponents }>
