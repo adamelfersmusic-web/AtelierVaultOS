@@ -5,7 +5,12 @@
 // No SDK and no MCP round-trip — a single fetch to api.anthropic.com with the
 // user's own key, read from client-side settings at call time.
 
-import { mostLinkedContext, searchVaultContext, toast } from './store'
+import {
+  mostLinkedContext,
+  notesByPrefixWithContent,
+  searchVaultContext,
+  toast,
+} from './store'
 import { titleFromPath } from './format'
 import type { Note } from './types'
 
@@ -134,6 +139,59 @@ async function requestMessages(
     .trim()
   if (!text) throw new AnthropicError('The model returned no text answer.')
   return text
+}
+
+// ---------------------------------------------------------------------------
+// Course-scoped Q&A — the <AskThePrimer> MDX component. Unlike askVault (which
+// RAGs the whole vault), this loads the ENTIRE ai-primer — a small, known set
+// of notes — so every answer is grounded in the full course with no retrieval
+// misses. Answers must cite the module notes they draw from.
+// ---------------------------------------------------------------------------
+
+const PRIMER_PREFIX = 'Atelier/Method/ai-primer/'
+
+const PRIMER_SYSTEM =
+  'You are the teaching assistant for "AI: Zero to Hero", a self-education ' +
+  'course on how AI systems work. The complete course — every module and the ' +
+  'glossary — is provided below as your ONLY source of truth. Answer the ' +
+  "learner's question using only these course notes; never pull from general " +
+  'knowledge. Name the module(s) you drew from (e.g. "Module 4 — Tools" or ' +
+  'the glossary). Lean on the course\'s core habit: when a term is involved, ' +
+  'say which of the eight layers it belongs to. If the course does not cover ' +
+  'the question, say so plainly and suggest the closest module. Write in clean ' +
+  'plain prose — no markdown, no bullets — in a warm, direct teaching voice.'
+
+export interface AskPrimerResult {
+  answer: string
+  /** Titles of the course notes used as grounding, for a citation line. */
+  sources: string[]
+}
+
+export async function askPrimer(input: AskVaultInput): Promise<AskPrimerResult> {
+  const { prompt, apiKey } = input
+  if (!apiKey) throw new AnthropicError('No Anthropic API key set.')
+
+  let notes: Note[]
+  try {
+    notes = await notesByPrefixWithContent(PRIMER_PREFIX)
+  } catch (e) {
+    throw new AnthropicError(
+      `Couldn't load the course notes — ${e instanceof Error ? e.message : String(e)}`,
+    )
+  }
+  // Exclude interactive/demo notes (underscore-prefixed) from grounding — they
+  // are rendering showcases, not source material. Order modules by number.
+  const source = notes
+    .filter((n) => !n.path.split('/').pop()!.startsWith('_'))
+    .sort((a, b) => {
+      const an = Number(a.metadata.module_number ?? 99)
+      const bn = Number(b.metadata.module_number ?? 99)
+      return an - bn
+    })
+
+  const system = `${PRIMER_SYSTEM}\n\n# The course\n\n${contextBlock(source)}`
+  const answer = await requestMessages(apiKey, system, prompt)
+  return { answer, sources: source.map((n) => titleFromPath(n.path)) }
 }
 
 export async function askVault(input: AskVaultInput): Promise<string> {

@@ -168,6 +168,19 @@ export class VaultApi {
     )
   }
 
+  /** Every note under a path prefix, WITH bodies — grounding for a
+   * course-scoped Q&A over a small, known set of notes. */
+  async listByPrefixWithContent(prefix: string, limit = 100): Promise<Note[]> {
+    const p = new URLSearchParams({
+      path_prefix: prefix,
+      limit: String(limit),
+      include_content: 'true',
+    })
+    return (await this.request<Note[]>('GET', `/notes?${p.toString()}`)).map(
+      VaultApi.normalize,
+    )
+  }
+
   /** Full-text search across the vault (lean shape). */
   async search(query: string, limit = 80): Promise<Note[]> {
     const p = new URLSearchParams({

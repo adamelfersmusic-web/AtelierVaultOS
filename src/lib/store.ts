@@ -433,6 +433,19 @@ export async function mostLinkedContext(limit = 20): Promise<Note[]> {
   }
 }
 
+/** All notes under a path prefix, WITH bodies — grounding context for the
+ * course-scoped /ask-the-primer component. Warms the note cache too. */
+export async function notesByPrefixWithContent(prefix: string): Promise<Note[]> {
+  try {
+    const results = await requireApi().listByPrefixWithContent(prefix)
+    mergeNotes(results)
+    return results
+  } catch (e) {
+    handleAuthFailure(e)
+    throw e
+  }
+}
+
 export async function recentNotes(): Promise<Note[]> {
   try {
     const results = await requireApi().listRecent()

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { Note } from '../lib/types'
 import {
   ContentDivergedError,
@@ -12,6 +12,13 @@ import {
 import { setRouteGuard } from '../lib/router'
 import { fullTime, relativeTime, titleFromPath } from '../lib/format'
 import { renderMarkdown } from '../lib/markdown'
+
+// The MDX runtime compiler is a heavy dependency tree; load it only when an
+// `mdx` note is actually opened so the markdown path (nearly every note)
+// pays nothing for it.
+const MdxNote = lazy(() =>
+  import('../lib/mdx/MdxNote').then((m) => ({ default: m.MdxNote })),
+)
 import {
   FIELDS,
   isProtectedNote,
@@ -321,11 +328,19 @@ export function NotePage({ path }: { path: string }) {
             <IconEdit size={13} />
             Edit
           </button>
-          <article
-            className="prose"
-            data-testid="note-body"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content ?? '') }}
-          />
+          {note.extension === 'mdx' ? (
+            <article className="prose" data-testid="note-body">
+              <Suspense fallback={<div className="mdx-loading" aria-hidden />}>
+                <MdxNote source={note.content ?? ''} />
+              </Suspense>
+            </article>
+          ) : (
+            <article
+              className="prose"
+              data-testid="note-body"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content ?? '') }}
+            />
+          )}
         </div>
       )}
 
