@@ -1168,6 +1168,43 @@ body.is-dragging .card {
   font-size: 13px;
 }
 
+/* --- MDX components (runtime-rendered notes) --- */
+.mdx-term-wrap {
+  position: relative;
+}
+.mdx-term {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--gold);
+  text-underline-offset: 3px;
+}
+.mdx-term:hover {
+  color: var(--ink);
+}
+.mdx-term[aria-expanded='true'] {
+  color: var(--ink);
+  text-decoration-style: solid;
+}
+.mdx-term-def {
+  display: block;
+  margin: 0.5em 0;
+  padding: 0.6em 0.9em;
+  border-left: 2px solid var(--gold);
+  background: var(--surface);
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.mdx-loading {
+  min-height: 1.5em;
+}
+
 .note-editor {
   width: 100%;
   min-height: 320px;
