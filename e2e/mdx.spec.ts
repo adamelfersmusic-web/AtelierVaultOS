@@ -64,7 +64,7 @@ test('mdx note: <Term> renders, expands on click, others degrade', async ({ page
 
   // Plain markdown around the component still renders.
   await expect(body).toContainText('layer two')
-  await expect(body.locator('strong')).toHaveText('bold')
+  await expect(body.locator('p strong')).toHaveText('bold')
 
   // <Term> rendered as an interactive term with the dotted underline.
   const term = body.locator('.mdx-term')
@@ -80,6 +80,8 @@ test('mdx note: <Term> renders, expands on click, others degrade', async ({ page
   await expect(body.locator('.mdx-term-def')).toContainText('model can consider')
   await page.screenshot({ path: 'e2e/.shots/mdx-term-expanded.png' })
 
-  // <Checklist> / <LayerQuiz> degraded gracefully — no crash, page intact.
+  // <Checklist> and <LayerQuiz> now render as real interactive components.
+  await expect(body.locator('.mdx-checklist input[type=checkbox]')).toHaveCount(3)
+  await expect(body.locator('.mdx-quiz .mdx-quiz-opt')).toHaveCount(8)
   await expect(body).toContainText('the record side is solved')
 })

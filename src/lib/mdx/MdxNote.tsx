@@ -10,7 +10,9 @@ import { evaluate } from '@mdx-js/mdx'
 import type { MDXComponents } from 'mdx/types'
 import { renderMarkdown } from '../markdown'
 import { Term } from './Term'
-import { Passthrough } from './Passthrough'
+import { Checklist } from './Checklist'
+import { LayerStack } from './LayerStack'
+import { LayerQuiz } from './LayerQuiz'
 
 // Runtime MDX rendering. The MDX comes from a REST fetch at page load, not
 // from files in the repo, so it is compiled in the browser here — no
@@ -22,12 +24,14 @@ import { Passthrough } from './Passthrough'
 // because the content is the user's own authenticated vault. Do not point
 // this renderer at untrusted third-party MDX.
 
-// The component registry. `Term` is the one real component; the rest are
-// passthrough stubs so unimplemented tags degrade instead of crashing.
+// The component registry — the vocabulary a course note can draw on. Any
+// capitalized tag not listed here degrades to plain text via the error
+// boundary rather than crashing the note.
 const COMPONENTS: MDXComponents = {
   Term,
-  Checklist: Passthrough,
-  LayerQuiz: Passthrough,
+  Checklist,
+  LayerStack,
+  LayerQuiz,
 }
 
 type Compiled = ComponentType<{ components?: MDXComponents }>
