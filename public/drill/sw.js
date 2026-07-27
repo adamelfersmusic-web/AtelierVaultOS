@@ -2,7 +2,7 @@
 // Caches the app shell + all voice clips so the drill runs with no internet
 // (practice anywhere; the AssemblyAI transcript, when wired, still needs signal).
 
-const CACHE = 'escensus-drill-v4'
+const CACHE = 'escensus-drill-v5'
 const ASSETS = [
   './',
   './index.html',
